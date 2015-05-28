@@ -1,5 +1,5 @@
 # logspout-redis-logstash
-Logspout adapter for writing Docker container stdout/stderr logs to Redis in Logstash jsonevent layout.
+[Logspout](https://github.com/gliderlabs/logspout) adapter for writing Docker container stdout/stderr logs to Redis in Logstash jsonevent layout.
 
 See the example below for more information.
 
@@ -25,3 +25,10 @@ docker run --rm centos:7 echo hello from a container
 Will result in a corresponding event in Elasticsearch. Below is a screenshot from Kibana4:
 
 ![](event-in-k4.png)
+
+
+## Credits
+
+Thanks to [Gliderlabs](https://github.com/gliderlabs) for creating Logspout!
+
+For other credits see the header of the redis.go source file.
