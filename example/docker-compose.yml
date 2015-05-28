@@ -23,7 +23,7 @@ logstash:
     - elasticsearch
 
 logspout:
-  image: rtoma/example-logspout
+  image: rtoma/logspout-redis-logstash
   command: 'redis://redis'
   environment:
     - DEBUG=true

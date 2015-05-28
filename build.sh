@@ -1,8 +1,6 @@
 #!/bin/sh
 cat > ./Dockerfile.example <<DOCKERFILE
 FROM gliderlabs/logspout:master
-
-ENV KAFKA_COMPRESSION_CODEC snappy
 DOCKERFILE
 
 cat > ./modules.go <<MODULES
@@ -14,4 +12,6 @@ import (
 )
 MODULES
 
-docker build -t rtoma/example-logspout -f Dockerfile.example .
+docker build -t rtoma/logspout-redis-logstash -f Dockerfile.example .
+
+rm -f Dockerfile.example modules.go
