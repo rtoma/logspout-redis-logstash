@@ -4,7 +4,7 @@ This directory contains everything you need to try out the logspout-redis-logsta
 
 This directory contains a docker-compose.yml that will allow you to quickly spin up linked & configured containers running these applications:
 
-- logspout
+- logspout, with redis-logstash adapter
 - redis
 - logstash
 - elasticsearch
@@ -41,3 +41,14 @@ Logstash consumes events from the redis list, does some magic when events come
 from Kibana and stores the events in Elasticsearch.
 
 Kibana allows humans to search the events.
+
+
+# Docker image
+
+If you want to use logspout with redis-logstash adapter you can use the image on Docker Hub.
+
+Get it using:
+
+```
+docker pull rtoma/logspout-redis-logstash
+```
