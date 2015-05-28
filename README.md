@@ -4,7 +4,7 @@ Logspout adapter for writing Docker container stdout/stderr logs to Redis in Log
 See the example below for more information.
 
 
-## Docker container available
+## Docker image available
 
 Logspout including this adapter is available on Docker Hub. Pull it with:
 
