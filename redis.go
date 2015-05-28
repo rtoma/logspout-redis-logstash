@@ -32,7 +32,7 @@ type DockerFields struct {
     Image       string `json:"image"`
     ImageTag    string `json:"image_tag"`
     Source      string `json:"source"`
-    DockerHost  string `json:"docker_host"`
+    DockerHost  string `json:"docker_host,omitempty"`
 }
 
 type LogstashFields struct {
