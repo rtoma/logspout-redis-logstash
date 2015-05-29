@@ -30,7 +30,7 @@ type DockerFields struct {
     Name        string `json:"name"`
     CID         string `json:"cid"`
     Image       string `json:"image"`
-    ImageTag    string `json:"image_tag"`
+    ImageTag    string `json:"image_tag,omitempty"`
     Source      string `json:"source"`
     DockerHost  string `json:"docker_host,omitempty"`
 }
