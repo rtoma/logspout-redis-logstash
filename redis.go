@@ -41,7 +41,7 @@ type LogstashFields struct {
 }
 
 type LogstashMessageV0 struct {
-	Type       string         `json:"@type"`
+	Type       string         `json:"@type,omitempty"`
 	Timestamp  string         `json:"@timestamp"`
 	Sourcehost string         `json:"@source_host"`
 	Message    string         `json:"@message"`
@@ -49,7 +49,7 @@ type LogstashMessageV0 struct {
 }
 
 type LogstashMessageV1 struct {
-	Type       string       `json:"@type"`
+	Type       string       `json:"@type,omitempty"`
 	Timestamp  string       `json:"@timestamp"`
 	Sourcehost string       `json:"host"`
 	Message    string       `json:"message"`
@@ -87,10 +87,6 @@ func NewRedisAdapter(route *router.Route) (router.LogAdapter, error) {
 	logstash_type := route.Options["logstash_type"]
 	if logstash_type == "" {
 		logstash_type = getopt("REDIS_LOGSTASH_TYPE", "")
-	}
-
-	if logstash_type == "" {
-		return nil, errorf("Must specify a logstash type")
 	}
 
 	if os.Getenv("DEBUG") != "" {
