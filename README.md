@@ -42,6 +42,22 @@ The REDIS\_KEY can be set as redis://host?key=\<key\>.
 
 The REDIS\_USE\_V0\_LAYOUT switch can be set with ?use\_v0\_layout=1
 
+## Contribution
+
+Want to add features? Feel welcome to submit a pull request!
+
+If you are unable to code, feel free to create a issue describing your feature request or bug report. 
+
+## Changelog
+
+### 0.1.1
+
+- The Redis adapter will now reconnect if Redis is unavailable or returns an error. Only 1 reconnect is attempted per event, so if it fails the event gets dropped. Thanks to @rogierlommers 
+- You can now specify a @type field value. Only if specified this field will be added to the event document. Thanks to @dkhunt27
+
+### 0.1.0
+
+- initial version
 
 
 ## ELK integration
