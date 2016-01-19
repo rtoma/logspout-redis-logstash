@@ -19,11 +19,12 @@ import (
 )
 
 type RedisAdapter struct {
-	route       *router.Route
-	pool        *redis.Pool
-	key         string
-	docker_host string
-	use_v0      bool
+	route         *router.Route
+	pool          *redis.Pool
+	key           string
+	docker_host   string
+	use_v0        bool
+	logstash_type string
 }
 
 type DockerFields struct {
@@ -40,6 +41,7 @@ type LogstashFields struct {
 }
 
 type LogstashMessageV0 struct {
+	Type       string         `json:"@type"`
 	Timestamp  string         `json:"@timestamp"`
 	Sourcehost string         `json:"@source_host"`
 	Message    string         `json:"@message"`
@@ -47,6 +49,7 @@ type LogstashMessageV0 struct {
 }
 
 type LogstashMessageV1 struct {
+	Type       string       `json:"@type"`
 	Timestamp  string       `json:"@timestamp"`
 	Sourcehost string       `json:"host"`
 	Message    string       `json:"message"`
@@ -58,7 +61,6 @@ func init() {
 }
 
 func NewRedisAdapter(route *router.Route) (router.LogAdapter, error) {
-
 	// add port if missing
 	address := route.Address
 	if !strings.Contains(address, ":") {
@@ -82,9 +84,18 @@ func NewRedisAdapter(route *router.Route) (router.LogAdapter, error) {
 		use_v0 = getopt("REDIS_USE_V0_LAYOUT", "") != ""
 	}
 
+	logstash_type := route.Options["logstash_type"]
+	if logstash_type == "" {
+		logstash_type = getopt("REDIS_LOGSTASH_TYPE", "")
+	}
+
+	if logstash_type == "" {
+		return nil, errorf("Must specify a logstash type")
+	}
+
 	if os.Getenv("DEBUG") != "" {
-		log.Printf("Using Redis server '%s', password: %t, pushkey: '%s', v0 layout: %t\n",
-			address, password != "", key, use_v0)
+		log.Printf("Using Redis server '%s', password: %t, pushkey: '%s', v0 layout: %t, logstash type: '%s'\n",
+			address, password != "", key, use_v0, logstash_type)
 	}
 
 	pool := newRedisConnectionPool(address, password)
@@ -101,11 +112,12 @@ func NewRedisAdapter(route *router.Route) (router.LogAdapter, error) {
 	}
 
 	return &RedisAdapter{
-		route:       route,
-		pool:        pool,
-		key:         key,
-		docker_host: docker_host,
-		use_v0:      use_v0,
+		route:         route,
+		pool:          pool,
+		key:           key,
+		docker_host:   docker_host,
+		use_v0:        use_v0,
+		logstash_type: logstash_type,
 	}, nil
 }
 
@@ -116,7 +128,7 @@ func (a *RedisAdapter) Stream(logstream chan *router.Message) {
 	mute := false
 
 	for m := range logstream {
-		msg := createLogstashMessage(m, a.docker_host, a.use_v0)
+		msg := createLogstashMessage(m, a.docker_host, a.use_v0, a.logstash_type)
 		js, err := json.Marshal(msg)
 		if err != nil {
 			if !mute {
@@ -195,7 +207,7 @@ func splitImage(image string) (string, string) {
 	return image, ""
 }
 
-func createLogstashMessage(m *router.Message, docker_host string, use_v0 bool) interface{} {
+func createLogstashMessage(m *router.Message, docker_host string, use_v0 bool, logstash_type string) interface{} {
 	image_name, image_tag := splitImage(m.Container.Config.Image)
 	cid := m.Container.ID[0:12]
 	name := m.Container.Name[1:]
@@ -203,6 +215,7 @@ func createLogstashMessage(m *router.Message, docker_host string, use_v0 bool) i
 
 	if use_v0 {
 		return LogstashMessageV0{
+			Type:       logstash_type,
 			Message:    m.Data,
 			Timestamp:  timestamp,
 			Sourcehost: m.Container.Config.Hostname,
@@ -220,6 +233,7 @@ func createLogstashMessage(m *router.Message, docker_host string, use_v0 bool) i
 	}
 
 	return LogstashMessageV1{
+		Type:       logstash_type,
 		Message:    m.Data,
 		Timestamp:  timestamp,
 		Sourcehost: m.Container.Config.Hostname,
@@ -233,4 +247,3 @@ func createLogstashMessage(m *router.Message, docker_host string, use_v0 bool) i
 		},
 	}
 }
-

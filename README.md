@@ -32,6 +32,7 @@ Behaviour of the adapter can be changed by passing configuration via docker envi
 - REDIS\_KEY=\<key\>: will configure the Redis list key to add events to (default is 'logspout');
 - REDIS\_DOCKER\_HOST=\<host\>: will add a docker.host=<host> field, allows you to add the hostname of your docker host, identifying where your container was running (think mesos cluster);
 - REDIS\_USE\_V0\_LAYOUT=1: logstash jsonevent layout v0 will be used (default is v1 layout).
+- REDIS\_LOGSTASH\_TYPE=json-log: logstash type/message parser.
 
 ### Endpoint query parameters
 
