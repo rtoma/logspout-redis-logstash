@@ -1,22 +1,22 @@
 kibana:
-  image: digitalwonderland/kibana
+  image: digitalwonderland/kibana:latest
   links:
     - elasticsearch
   ports:
     - 5601:5601
   
 elasticsearch:
-  image: elasticsearch
+  image: elasticsearch:1.7.4
   ports:
     - 9200:9200
 
 redis:
-  image: redis
+  image: redis:3.0.0
   ports:
     - 6379:6379
 
 logstash:
-  image: logstash
+  image: logstash:1.5.5
   command: 'logstash -f /logstash.conf -v'
   volumes:
     - ./logstash.conf:/logstash.conf
@@ -25,13 +25,14 @@ logstash:
     - elasticsearch
 
 logspout:
-  image: rtoma/logspout-redis-logstash
+  image: rtoma/logspout-redis-logstash:0.1.1
   command: 'redis://redis'
   environment:
     - DEBUG=true
 #    - REDIS_PASSWORD=secret
     - REDIS_KEY=logstash
     - REDIS_DOCKER_HOST=macbookpro
+#    - REDIS_LOGSTASH_TYPE=docker
   volumes:
     - /var/run/docker.sock:/var/run/docker.sock:ro
   links:
