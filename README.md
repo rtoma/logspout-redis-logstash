@@ -50,6 +50,11 @@ If you are unable to code, feel free to create a issue describing your feature r
 
 ## Changelog
 
+### 0.1.2
+
+- Bugfix: edge case when using a non-Hub image with port number (e.g. my.registry.com:443/my/image:tag)
+- Added unit tests to test for regression
+
 ### 0.1.1
 
 - The Redis adapter will now reconnect if Redis is unavailable or returns an error. Only 1 reconnect is attempted per event, so if it fails the event gets dropped. Thanks to @rogierlommers 

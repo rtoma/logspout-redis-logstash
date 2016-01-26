@@ -2,3 +2,5 @@ modules.go
 Dockerfile.example
 
 .idea
+pkg/
+src/

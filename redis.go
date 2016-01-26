@@ -124,8 +124,7 @@ func (a *RedisAdapter) Stream(logstream chan *router.Message) {
 	mute := false
 
 	for m := range logstream {
-		msg := createLogstashMessage(m, a.docker_host, a.use_v0, a.logstash_type)
-		js, err := json.Marshal(msg)
+		js, err := createLogstashMessage(m, a.docker_host, a.use_v0, a.logstash_type)
 		if err != nil {
 			if !mute {
 				log.Println("redis: error on json.Marshal (muting until recovered): ", err)
@@ -195,22 +194,27 @@ func newRedisConnectionPool(server, password string) *redis.Pool {
 	}
 }
 
-func splitImage(image string) (string, string) {
-	n := strings.Index(image, ":")
-	if n > -1 {
-		return image[0:n], image[n+1:]
+func splitImage(image_tag string) (image string, tag string) {
+	colon := strings.LastIndex(image_tag, ":")
+	if colon > -1 {
+		image = image_tag[0:colon]
+		tag = image_tag[colon+1:]
+	} else {
+		image = image_tag
 	}
-	return image, ""
+	return
 }
 
-func createLogstashMessage(m *router.Message, docker_host string, use_v0 bool, logstash_type string) interface{} {
-	image_name, image_tag := splitImage(m.Container.Config.Image)
+func createLogstashMessage(m *router.Message, docker_host string, use_v0 bool, logstash_type string) ([]byte, error) {
+	image, image_tag := splitImage(m.Container.Config.Image)
 	cid := m.Container.ID[0:12]
 	name := m.Container.Name[1:]
-	timestamp := m.Time.Format(time.RFC3339Nano)
+	timestamp := m.Time.UTC().Format(time.RFC3339Nano)
+
+	var msg interface{}
 
 	if use_v0 {
-		return LogstashMessageV0{
+		msg = LogstashMessageV0{
 			Type:       logstash_type,
 			Message:    m.Data,
 			Timestamp:  timestamp,
@@ -219,27 +223,30 @@ func createLogstashMessage(m *router.Message, docker_host string, use_v0 bool, l
 				Docker: DockerFields{
 					CID:        cid,
 					Name:       name,
-					Image:      image_name,
+					Image:      image,
 					ImageTag:   image_tag,
 					Source:     m.Source,
 					DockerHost: docker_host,
 				},
 			},
 		}
+	} else {
+		msg = LogstashMessageV1{
+			Type:       logstash_type,
+			Message:    m.Data,
+			Timestamp:  timestamp,
+			Sourcehost: m.Container.Config.Hostname,
+			Fields: DockerFields{
+				CID:        cid,
+				Name:       name,
+				Image:      image,
+				ImageTag:   image_tag,
+				Source:     m.Source,
+				DockerHost: docker_host,
+			},
+		}
 	}
 
-	return LogstashMessageV1{
-		Type:       logstash_type,
-		Message:    m.Data,
-		Timestamp:  timestamp,
-		Sourcehost: m.Container.Config.Hostname,
-		Fields: DockerFields{
-			CID:        cid,
-			Name:       name,
-			Image:      image_name,
-			ImageTag:   image_tag,
-			Source:     m.Source,
-			DockerHost: docker_host,
-		},
-	}
+	return json.Marshal(msg)
+
 }
