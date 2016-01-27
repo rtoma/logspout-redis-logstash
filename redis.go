@@ -13,6 +13,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"strconv"
 
 	"github.com/garyburd/redigo/redis"
 	"github.com/gliderlabs/logspout/router"
@@ -67,34 +68,27 @@ func NewRedisAdapter(route *router.Route) (router.LogAdapter, error) {
 		address = address + ":6379"
 	}
 
-	key := route.Options["key"]
-	if key == "" {
-		key = getopt("REDIS_KEY", "logspout")
+	// get our config keys, first from the route options (e.g. redis://<host>?opt1=val&opt1=val&...)
+	// if route option is missing, attempt to get the value from the environment
+	key := getopt(route.Options, "key", "REDIS_KEY", "logspout")
+	password := getopt(route.Options, "password", "REDIS_PASSWORD", "")
+	docker_host := getopt(route.Options, "docker_host", "REDIS_DOCKER_HOST", "")
+	use_v0 := getopt(route.Options, "use_v0_layout", "REDIS_USE_V0_LAYOUT", "") != ""
+	logstash_type := getopt(route.Options, "logstash_type", "REDIS_LOGSTASH_TYPE", "")
+	debug := getopt(route.Options, "debug", "DEBUG", "") != ""
+
+	database_s := getopt(route.Options, "database", "REDIS_DATABASE", "0")
+	database, err := strconv.Atoi(database_s)
+	if err != nil {
+		return nil, errorf("Invalid Redis database number specified: %s. Please verify & fix", database_s)
 	}
 
-	password := route.Options["password"]
-	if password == "" {
-		password = getopt("REDIS_PASSWORD", "")
+	if debug {
+		log.Printf("Using Redis server '%s', dbnum: %d, password?: %t, pushkey: '%s', v0 layout?: %t, logstash type: '%s'\n",
+			address, database, password != "", key, use_v0, logstash_type)
 	}
 
-	docker_host := getopt("REDIS_DOCKER_HOST", "")
-
-	use_v0 := route.Options["use_v0_layout"] != ""
-	if !use_v0 {
-		use_v0 = getopt("REDIS_USE_V0_LAYOUT", "") != ""
-	}
-
-	logstash_type := route.Options["logstash_type"]
-	if logstash_type == "" {
-		logstash_type = getopt("REDIS_LOGSTASH_TYPE", "")
-	}
-
-	if os.Getenv("DEBUG") != "" {
-		log.Printf("Using Redis server '%s', password: %t, pushkey: '%s', v0 layout: %t, logstash type: '%s'\n",
-			address, password != "", key, use_v0, logstash_type)
-	}
-
-	pool := newRedisConnectionPool(address, password)
+	pool := newRedisConnectionPool(address, password, database)
 
 	// lets test the water
 	conn := pool.Get()
@@ -103,7 +97,7 @@ func NewRedisAdapter(route *router.Route) (router.LogAdapter, error) {
 	if err != nil {
 		return nil, errorf("Cannot connect to Redis server %s: %v", address, err)
 	}
-	if os.Getenv("DEBUG") != "" {
+	if debug {
 		log.Printf("Redis connect successful, got response: %s\n", res)
 	}
 
@@ -162,15 +156,18 @@ func errorf(format string, a ...interface{}) (err error) {
 	return
 }
 
-func getopt(name, dfault string) string {
-	value := os.Getenv(name)
+func getopt(options map[string]string, optkey string, envkey string, default_value string) (value string) {
+	value = options[optkey]
 	if value == "" {
-		value = dfault
+		value = os.Getenv(envkey)
+		if value == "" {
+			value = default_value
+		}
 	}
-	return value
+	return
 }
 
-func newRedisConnectionPool(server, password string) *redis.Pool {
+func newRedisConnectionPool(server, password string, database int) *redis.Pool {
 	return &redis.Pool{
 		MaxIdle:     3,
 		IdleTimeout: 240 * time.Second,
@@ -185,7 +182,13 @@ func newRedisConnectionPool(server, password string) *redis.Pool {
 					return nil, err
 				}
 			}
-			return c, err
+			if database > 0 {
+				if _, err := c.Do("SELECT", database); err != nil {
+					c.Close()
+					return nil, err
+				}
+			}
+			return c, nil
 		},
 		TestOnBorrow: func(c redis.Conn, t time.Time) error {
 			_, err := c.Do("PING")

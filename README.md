@@ -15,32 +15,30 @@ $ docker pull rtoma/logspout-redis-logstash
 ## How to use the Docker image
 
 ```
-$ docker run -d --name logspout /var/run/docker.sock:/var/run/docker.sock:ro rtoma/logspout-redis-logstash redis://<your-redis-server>
+$ docker run -d --name logspout \
+  -v /var/run/docker.sock:/var/run/docker.sock:ro \
+  rtoma/logspout-redis-logstash \
+  redis://<your-redis-server>?key=bla&...
 ```
 
 ## Configuration
 
-Some configuration can be passed via container environment keys. Some can be appended as query parameters to the endpoint.
+Some configuration can be passed via container environment keys.
 
+Some can be passed via route options (e.g. `logspout redis://<host>?key=foo&password=secret`).
 
-### Environment keys
+This table shows all configuration parameters:
 
-Behaviour of the adapter can be changed by passing configuration via docker environment vars (e.g. -e key=val).
+| Parameter | Default | Environment key | Route option key |
+|-----------|---------|-----------------|------------------|
+| Enable debug, if set debug logging will be printed | disabled | DEBUG | debug |
+| Redis password, if set this will force the adapter to execute a Redis AUTH command | none | REDIS_PASSWORD | password |
+| Redis key, events will be pushed to this Redis list object | 'logspout' | REDIS_KEY | key |
+| Redis database, if set the adapter will execute a Redis SELECT command | 0 | REDIS_DATABASE | database |
+| Docker host, will add a docker.host=\<host\> field to the event, allowing you to add the hostname of your host, identifying where your container was running (think mesos) | none | REDIS\_DOCKER\_HOST | docker_host |
+| Use Layout v0, what Logstash json format is used | false (meaning we use v1) | REDIS\_USE\_V0\_LAYOUT | use_v0_layout |
+| Logstash type, if set the event will get a @type property | none | REDIS\_LOGSTASH\_TYPE | logstash_type |
 
-- DEBUG=1: will enable logspout debug mode (default is disabled);
-- REDIS\_PASSWORD=\<password\>: will force the adapter to do an AUTH to Redis (default is none);
-- REDIS\_KEY=\<key\>: will configure the Redis list key to add events to (default is 'logspout');
-- REDIS\_DOCKER\_HOST=\<host\>: will add a docker.host=<host> field, allows you to add the hostname of your docker host, identifying where your container was running (think mesos cluster);
-- REDIS\_USE\_V0\_LAYOUT=1: logstash jsonevent layout v0 will be used (default is v1 layout).
-- REDIS\_LOGSTASH\_TYPE=\<type\>: value for the @type document field (default is none, the @type field is only added if a non-empty value has been specified)
-
-### Endpoint query parameters
-
-Two keys can also be set as endpoint query parameters.
-
-The REDIS\_KEY can be set as redis://host?key=\<key\>.
-
-The REDIS\_USE\_V0\_LAYOUT switch can be set with ?use\_v0\_layout=1
 
 ## Contribution
 
@@ -49,6 +47,11 @@ Want to add features? Feel welcome to submit a pull request!
 If you are unable to code, feel free to create a issue describing your feature request or bug report. 
 
 ## Changelog
+
+### 0.1.3
+
+- Refactoring of configuration possiblities
+- Introducing the 'Redis database' configuration parameter, allowing you to push events to a specific Redis database number.
 
 ### 0.1.2
 
