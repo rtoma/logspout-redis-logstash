@@ -34,6 +34,10 @@ func TestSplitImage(t *testing.T) {
 	assert.Equal("my.registry.host:443/path/to/image", image)
 	assert.Equal("3.1.4", tag)
 
+	image, tag = splitImage("my.registry.host:443/path/to/image")
+	assert.Equal("my.registry.host:443/path/to/image", image)
+	assert.Equal("", tag)
+
 }
 
 func TestCreateLogstashMessageV1(t *testing.T) {

@@ -199,7 +199,8 @@ func newRedisConnectionPool(server, password string, database int) *redis.Pool {
 
 func splitImage(image_tag string) (image string, tag string) {
 	colon := strings.LastIndex(image_tag, ":")
-	if colon > -1 {
+	sep := strings.LastIndex(image_tag, "/")
+	if colon > -1 && sep < colon {
 		image = image_tag[0:colon]
 		tag = image_tag[colon+1:]
 	} else {
