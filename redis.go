@@ -7,6 +7,7 @@
 package redis
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -17,6 +18,11 @@ import (
 
 	"github.com/garyburd/redigo/redis"
 	"github.com/gliderlabs/logspout/router"
+	"github.com/jmoiron/jsonq"
+)
+
+var (
+	AllowedTypelist = []string{"generic"}
 )
 
 type RedisAdapter struct {
@@ -32,7 +38,7 @@ type GenericItems struct {
 	Level    string `json:"level"`
 	Threadid string `json:"threadid"`
 	File     string `json:"file"`
-	Line     string `json:"line"`
+	Line     int    `json:"line"`
 }
 
 type GenericFields struct {
@@ -143,10 +149,13 @@ func (a *RedisAdapter) Stream(logstream chan *router.Message) {
 	validJson := false
 
 	for m := range logstream {
-		validJson = checkValidJsonMessage(m.Data)
 
+		var js []byte
+		var err error
+		validJson = looksToBeJsonMessage(m.Data)
+		validJson = looksToBeJsonMessage(m.Data)
 		if !validJson {
-			js, err := createLogstashMessage(m, a.docker_host, a.use_v0, a.logstash_type)
+			js, err = createLogstashMessage(m, a.docker_host, a.use_v0, a.logstash_type)
 			if err != nil {
 				if !mute {
 					log.Println("redis: error on json.Marshal (muting until recovered): ", err)
@@ -286,6 +295,44 @@ func createLogstashMessage(m *router.Message, docker_host string, use_v0 bool, l
 
 }
 
-func checkValidJsonMessage(s string) bool {
+func looksToBeJsonMessage(s string) bool {
 	return strings.HasPrefix(s, "{") && strings.HasSuffix(s, "}")
+}
+
+func isGenericJsonMessage(s string) bool {
+	var msg LogstashMessageV2
+	err := json.Unmarshal([]byte(s), &msg)
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+
+	return err == nil
+}
+
+func isOfAllowedType(s string) bool {
+	jq := makeQuery([]byte(s))
+	fmt.Println("log_type " + getString(jq, "@fields", "log_type"))
+	return contains(AllowedTypelist, getString(jq, "@fields", "log_type"))
+}
+
+func getString(j *jsonq.JsonQuery, s ...string) string {
+	v, _ := j.String(s...)
+	return v
+}
+
+func makeQuery(msg []byte) *jsonq.JsonQuery {
+	data := map[string]interface{}{}
+	dec := json.NewDecoder(bytes.NewReader(msg))
+	dec.Decode(&data)
+	jq := jsonq.NewQuery(data)
+	return jq
+}
+
+func contains(s []string, e string) bool {
+	for _, a := range s {
+		if a == e {
+			return true
+		}
+	}
+	return false
 }
