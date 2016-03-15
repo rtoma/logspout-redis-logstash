@@ -11,9 +11,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
-	"strconv"
 
 	"github.com/garyburd/redigo/redis"
 	"github.com/gliderlabs/logspout/router"
@@ -26,6 +26,22 @@ type RedisAdapter struct {
 	docker_host   string
 	use_v0        bool
 	logstash_type string
+}
+
+type GenericItems struct {
+	Level    string `json:"level"`
+	Threadid string `json:"threadid"`
+	File     string `json:"file"`
+	Line     string `json:"line"`
+}
+
+type GenericFields struct {
+	Docker      DockerFields `json:"docker"`
+	Logtype     string       `json:"log_type"`
+	Generic     GenericItems `json:generic`
+	Instance    string       `json:"instance"`
+	Role        string       `json:"role"`
+	Application string       `json:"application"`
 }
 
 type DockerFields struct {
@@ -55,6 +71,14 @@ type LogstashMessageV1 struct {
 	Sourcehost string       `json:"host"`
 	Message    string       `json:"message"`
 	Fields     DockerFields `json:"docker"`
+}
+
+type LogstashMessageV2 struct {
+	Type       string        `json:"@type,omitempty"`
+	Timestamp  string        `json:"@timestamp"`
+	Sourcehost string        `json:"@source_host"`
+	Message    string        `json:"@message"`
+	Fields     GenericFields `json:"@fields"`
 }
 
 func init() {
@@ -116,15 +140,22 @@ func (a *RedisAdapter) Stream(logstream chan *router.Message) {
 	defer conn.Close()
 
 	mute := false
+	validJson := false
 
 	for m := range logstream {
-		js, err := createLogstashMessage(m, a.docker_host, a.use_v0, a.logstash_type)
-		if err != nil {
-			if !mute {
-				log.Println("redis: error on json.Marshal (muting until recovered): ", err)
-				mute = true
+		validJson = checkValidJsonMessage(m.Data)
+
+		if !validJson {
+			js, err := createLogstashMessage(m, a.docker_host, a.use_v0, a.logstash_type)
+			if err != nil {
+				if !mute {
+					log.Println("redis: error on json.Marshal (muting until recovered): ", err)
+					mute = true
+				}
+				continue
 			}
-			continue
+		} else {
+			js = []byte(m.Data)
 		}
 		_, err = conn.Do("RPUSH", a.key, js)
 		if err != nil {
@@ -253,4 +284,8 @@ func createLogstashMessage(m *router.Message, docker_host string, use_v0 bool, l
 
 	return json.Marshal(msg)
 
+}
+
+func checkValidJsonMessage(s string) bool {
+	return strings.HasPrefix(s, "{") && strings.HasSuffix(s, "}")
 }
