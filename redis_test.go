@@ -1,11 +1,15 @@
 package redis
 
 import (
+	"bytes"
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/fsouza/go-dockerclient"
 	"github.com/gliderlabs/logspout/router"
+	"github.com/jmoiron/jsonq"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -56,7 +60,7 @@ func TestCreateLogstashMessageV1(t *testing.T) {
 		Time:   time.Unix(int64(1453818496), 595000000),
 	}
 
-	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", false, "my-type")
+	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", false, "my-type", "")
 	jq := makeQuery(msg)
 
 	assert.Equal("my-type", getString(jq, "@type"))
@@ -90,7 +94,7 @@ func TestCreateLogstashMessageV0(t *testing.T) {
 		Time:   time.Unix(int64(1453813310), 1000000),
 	}
 
-	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", true, "some-type")
+	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", true, "some-type", "")
 	jq := makeQuery(msg)
 
 	assert.Equal("some-type", getString(jq, "@type"))
@@ -124,51 +128,75 @@ func TestCreateLogstashMessageOptionalType(t *testing.T) {
 		Time:   time.Unix(int64(1453813310), 0),
 	}
 
-	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", true, "")
+	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", true, "", "")
 	jq := makeQuery(msg)
 
 	assert.Equal("", getString(jq, "@type"))
 
 }
 
-func TestLooksToBeJsonMessage(t *testing.T) {
+func TestIsValidJsonMessageNoJson(t *testing.T) {
 	assert := assert.New(t)
 
-	assert.False(looksToBeJsonMessage("ffff"))
-	assert.True(looksToBeJsonMessage("{ffff}"))
-	assert.False(looksToBeJsonMessage(""))
+	js := `whateverthefuckever`
+	validJson, _ := isValidJsonMessage(js)
+	assert.Equal(validJson, LogstashMessageGeneric{})
 
 }
 
-func TestIsGenericJsonMessage(t *testing.T) {
+func TestIsValidJsonMessageIncorrectLogtype(t *testing.T) {
 	assert := assert.New(t)
 
-	/*js := `{
-	  "@source_host":"test.here.com",
-	  "@timestamp":"2013-10-24T09:30:46.947024155+02:00",
-	  "@fields":{
-	       "docker": {
-			  "name": "/my_db",
-			  "cid":"dsfbgrgfer45t",
-	          "image": "my.registry.host:443/path/to/image",
-	          "image_tag": "0.1.1",
-	          "source":"stderr",
-			  "docker_host":"tst-mesos-slave-001"
-	       },
-	       "log_type": "generic",
-	       "generic": {
-	          "level":"INFO",
-	          "threadid":"400004",
-	          "file":"file.go",
-	          "line":10
-	       },
-	      "instance": "001",
-	      "role": "kevlar-app",
-	      "application": "kevlar"
-	  },
-	  "@message":"hello"
-	}`
-	*/
+	js := `{
+  "@source_host":"test.here.com",
+  "@timestamp":"2013-10-24T09:30:46.947024155+02:00",
+  "@fields":{
+       "log_type": "wrong",
+       "generic": {
+          "level":"INFO",
+          "threadid":"400004",
+          "file":"file.go",
+          "line":10
+       },
+      "instance": "001",
+      "role": "kevlar-app",
+      "application": "kevlar"
+  },
+  "@message":"hello"
+}`
+	validJson, _ := isValidJsonMessage(js)
+	assert.Equal(validJson, LogstashMessageGeneric{})
+
+}
+
+func TestIsValidJsonMessageMissingGenericFields(t *testing.T) {
+	assert := assert.New(t)
+
+	js := `{
+  "@source_host":"test.here.com",
+  "@timestamp":"2013-10-24T09:30:46.947024155+02:00",
+  "@fields":{
+       "log_type": "generic",
+       "generic": {
+          "threadid":"400004",
+          "file":"file.go",
+          "line":10
+       },
+      "instance": "001",
+      "role": "kevlar-app",
+      "application": "kevlar"
+  },
+  "@message":"hello"
+}`
+	validJson, err := isValidJsonMessage(js)
+	assert.True(strings.Contains(err, MISSING_FIELDS_MESSAGE))
+	assert.Equal(validJson, LogstashMessageGeneric{})
+
+}
+
+func TestIsValidJsonMessage(t *testing.T) {
+	assert := assert.New(t)
+
 	js := `{
   "@source_host":"test.here.com",
   "@timestamp":"2013-10-24T09:30:46.947024155+02:00",
@@ -186,72 +214,63 @@ func TestIsGenericJsonMessage(t *testing.T) {
   },
   "@message":"hello"
 }`
-
-	assert.True(isGenericJsonMessage(js))
+	validJson, _ := isValidJsonMessage(js)
+	assert.NotEqual(validJson, LogstashMessageGeneric{})
 
 }
 
-func TestIsOfAllowedType(t *testing.T) {
+func TestMergedWithdockerFields(t *testing.T) {
 	assert := assert.New(t)
 
-	js := `{
-  "@source_host":"test.here.com",
-  "@timestamp":"2013-10-24T09:30:46.947024155+02:00",
-  "@fields":{
-       "log_type": "generfic",
-       "generic": {
-          "level":"INFO",
-          "threadid":"400004",
-          "file":"file.go",
-          "line":10
-       },
-      "instance": "001",
-      "role": "kevlar-app",
-      "application": "kevlar"
-  },
-  "@message":"hello"
-}`
+	m := router.Message{
+		Container: &docker.Container{
+			ID:   "f00ffd9428dc",
+			Name: "/my_db",
+			Config: &docker.Config{
+				Hostname: "container_hostname",
+				Image:    "my.registry.host:443/path/to/image:4321",
+			},
+		},
+		Source: "stderr",
+		Data:   "cruel world",
+		Time:   time.Unix(int64(1453813310), 0),
+	}
 
-	assert.False(isOfAllowedType(js))
+	var msg LogstashMessageGeneric
+	msg = LogstashMessageGeneric{
+		Message:    m.Data,
+		Timestamp:  "2013-10-24T09:30:46.947024155+02:00",
+		Sourcehost: m.Container.Config.Hostname,
+		Fields: GenericFields{
+			Logtype: "generic",
+			Generic: GenericItems{
+				Level:    "INFO",
+				Threadid: "40004",
+				File:     "my.go",
+				Line:     10,
+			},
+			Instance:    "001",
+			Role:        "kevlar-app",
+			Application: "kevlar",
+		},
+	}
 
-	js = `{
-  "@source_host":"test.here.com",
-  "@timestamp":"2013-10-24T09:30:46.947024155+02:00",
-  "@fields":{
-       "log_type": "",
-       "generic": {
-          "level":"INFO",
-          "threadid":"400004",
-          "file":"file.go",
-          "line":10
-       },
-      "instance": "001",
-      "role": "kevlar-app",
-      "application": "kevlar"
-  },
-  "@message":"hello"
-}`
+	msg = mergedWithdockerFields(&m, msg, "tst-mesos-slave-001")
 
-	assert.False(isOfAllowedType(js))
+	assert.Equal("f00ffd9428dc", msg.Fields.Docker.CID)
+	assert.Equal("my.registry.host:443/path/to/image", msg.Fields.Docker.Image)
 
-	js = `{
-  "@source_host":"test.here.com",
-  "@timestamp":"2013-10-24T09:30:46.947024155+02:00",
-  "@fields":{
-       "log_type": "generic",
-       "generic": {
-          "level":"INFO",
-          "threadid":"400004",
-          "file":"file.go",
-          "line":10
-       },
-      "instance": "001",
-      "role": "kevlar-app",
-      "application": "kevlar"
-  },
-  "@message":"hello"
-}`
+}
 
-	assert.True(isOfAllowedType(js))
+func getString(j *jsonq.JsonQuery, s ...string) string {
+	v, _ := j.String(s...)
+	return v
+}
 
+func makeQuery(msg []byte) *jsonq.JsonQuery {
+	data := map[string]interface{}{}
+	dec := json.NewDecoder(bytes.NewReader(msg))
+	dec.Decode(&data)
+	jq := jsonq.NewQuery(data)
+	return jq
 }

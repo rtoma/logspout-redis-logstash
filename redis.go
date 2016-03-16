@@ -7,7 +7,6 @@
 package redis
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -18,11 +17,15 @@ import (
 
 	"github.com/garyburd/redigo/redis"
 	"github.com/gliderlabs/logspout/router"
-	"github.com/jmoiron/jsonq"
 )
 
 var (
 	AllowedTypelist = []string{"generic"}
+)
+
+const (
+	MISSING_FIELDS_MESSAGE   = "Missing required fields for logtype"
+	MANDATORY_FIELDS_GENERIC = "level, threadid, file, line"
 )
 
 type RedisAdapter struct {
@@ -60,7 +63,8 @@ type DockerFields struct {
 }
 
 type LogstashFields struct {
-	Docker DockerFields `json:"docker"`
+	Docker      DockerFields `json:"docker"`
+	Decodeerror string       `json:"decode_error`
 }
 
 type LogstashMessageV0 struct {
@@ -72,15 +76,15 @@ type LogstashMessageV0 struct {
 }
 
 type LogstashMessageV1 struct {
-	Type       string       `json:"@type,omitempty"`
-	Timestamp  string       `json:"@timestamp"`
-	Sourcehost string       `json:"host"`
-	Message    string       `json:"message"`
-	Fields     DockerFields `json:"docker"`
+	Type        string       `json:"@type,omitempty"`
+	Timestamp   string       `json:"@timestamp"`
+	Sourcehost  string       `json:"host"`
+	Message     string       `json:"message"`
+	Decodeerror string       `json:"decode_error`
+	Fields      DockerFields `json:"docker"`
 }
 
-type LogstashMessageV2 struct {
-	Type       string        `json:"@type,omitempty"`
+type LogstashMessageGeneric struct {
 	Timestamp  string        `json:"@timestamp"`
 	Sourcehost string        `json:"@source_host"`
 	Message    string        `json:"@message"`
@@ -146,16 +150,16 @@ func (a *RedisAdapter) Stream(logstream chan *router.Message) {
 	defer conn.Close()
 
 	mute := false
-	validJson := false
 
 	for m := range logstream {
 
 		var js []byte
 		var err error
-		validJson = looksToBeJsonMessage(m.Data)
-		validJson = looksToBeJsonMessage(m.Data)
-		if !validJson {
-			js, err = createLogstashMessage(m, a.docker_host, a.use_v0, a.logstash_type)
+		// if Data passes all checks, logstashMessageGeneric is an non-empty struct
+		// Possibly an error message is provided with the reason why the provided json is not accepted
+		logstashMessageGeneric, decodeError := isValidJsonMessage(m.Data)
+		if logstashMessageGeneric == (LogstashMessageGeneric{}) {
+			js, err = createLogstashMessage(m, a.docker_host, a.use_v0, a.logstash_type, decodeError)
 			if err != nil {
 				if !mute {
 					log.Println("redis: error on json.Marshal (muting until recovered): ", err)
@@ -164,7 +168,8 @@ func (a *RedisAdapter) Stream(logstream chan *router.Message) {
 				continue
 			}
 		} else {
-			js = []byte(m.Data)
+			// merge Docker fields into provided json
+			js, _ = json.Marshal(mergedWithdockerFields(m, logstashMessageGeneric, a.docker_host))
 		}
 		_, err = conn.Do("RPUSH", a.key, js)
 		if err != nil {
@@ -249,7 +254,7 @@ func splitImage(image_tag string) (image string, tag string) {
 	return
 }
 
-func createLogstashMessage(m *router.Message, docker_host string, use_v0 bool, logstash_type string) ([]byte, error) {
+func createLogstashMessage(m *router.Message, docker_host string, use_v0 bool, logstash_type string, decodeError string) ([]byte, error) {
 	image, image_tag := splitImage(m.Container.Config.Image)
 	cid := m.Container.ID[0:12]
 	name := m.Container.Name[1:]
@@ -272,14 +277,16 @@ func createLogstashMessage(m *router.Message, docker_host string, use_v0 bool, l
 					Source:     m.Source,
 					DockerHost: docker_host,
 				},
+				Decodeerror: decodeError,
 			},
 		}
 	} else {
 		msg = LogstashMessageV1{
-			Type:       logstash_type,
-			Message:    m.Data,
-			Timestamp:  timestamp,
-			Sourcehost: m.Container.Config.Hostname,
+			Type:        logstash_type,
+			Message:     m.Data,
+			Timestamp:   timestamp,
+			Sourcehost:  m.Container.Config.Hostname,
+			Decodeerror: decodeError,
 			Fields: DockerFields{
 				CID:        cid,
 				Name:       name,
@@ -295,37 +302,40 @@ func createLogstashMessage(m *router.Message, docker_host string, use_v0 bool, l
 
 }
 
-func looksToBeJsonMessage(s string) bool {
-	return strings.HasPrefix(s, "{") && strings.HasSuffix(s, "}")
+func mergedWithdockerFields(m *router.Message, obj LogstashMessageGeneric, docker_host string) LogstashMessageGeneric {
+	image, image_tag := splitImage(m.Container.Config.Image)
+	cid := m.Container.ID[0:12]
+	name := m.Container.Name[1:]
+
+	local := obj
+	local.Fields.Docker.Name = name
+	local.Fields.Docker.CID = cid
+	local.Fields.Docker.Image = image
+	local.Fields.Docker.ImageTag = image_tag
+	local.Fields.Docker.DockerHost = docker_host
+
+	return local
 }
 
-func isGenericJsonMessage(s string) bool {
-	var msg LogstashMessageV2
+func isValidJsonMessage(s string) (LogstashMessageGeneric, string) {
+	var msg LogstashMessageGeneric
 	err := json.Unmarshal([]byte(s), &msg)
 	if err != nil {
-		fmt.Println(err.Error())
+		// Unmarshalling not possible, message not valid as json
+		return LogstashMessageGeneric{}, ""
+	}
+	if !contains(AllowedTypelist, msg.Fields.Logtype) {
+		// logtype in json is an unsupported logtype
+		return LogstashMessageGeneric{}, ""
+	}
+	if msg.Fields.Generic.Level == "" ||
+		msg.Fields.Generic.Threadid == "" ||
+		msg.Fields.Generic.File == "" ||
+		msg.Fields.Generic.Line == 0 {
+		return LogstashMessageGeneric{}, fmt.Sprintf("%s %s (%s)", MISSING_FIELDS_MESSAGE, msg.Fields.Logtype, MANDATORY_FIELDS_GENERIC)
 	}
 
-	return err == nil
-}
-
-func isOfAllowedType(s string) bool {
-	jq := makeQuery([]byte(s))
-	fmt.Println("log_type " + getString(jq, "@fields", "log_type"))
-	return contains(AllowedTypelist, getString(jq, "@fields", "log_type"))
-}
-
-func getString(j *jsonq.JsonQuery, s ...string) string {
-	v, _ := j.String(s...)
-	return v
-}
-
-func makeQuery(msg []byte) *jsonq.JsonQuery {
-	data := map[string]interface{}{}
-	dec := json.NewDecoder(bytes.NewReader(msg))
-	dec.Decode(&data)
-	jq := jsonq.NewQuery(data)
-	return jq
+	return msg, ""
 }
 
 func contains(s []string, e string) bool {
