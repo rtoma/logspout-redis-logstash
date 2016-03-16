@@ -171,9 +171,7 @@ func (a *RedisAdapter) Stream(logstream chan *router.Message) {
 			// merge Docker fields into provided json
 			js, _ = json.Marshal(mergedWithdockerFields(m, logstashMessageGeneric, a.docker_host))
 		}
-		if debug {
-			log.Printf("Json: %s", js)
-		}
+		log.Printf("Json: %s", js)
 		_, err = conn.Do("RPUSH", a.key, js)
 		if err != nil {
 			if !mute {
