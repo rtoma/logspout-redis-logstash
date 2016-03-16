@@ -157,7 +157,7 @@ func (a *RedisAdapter) Stream(logstream chan *router.Message) {
 		var err error
 		// if Data passes all checks, logstashMessageGeneric is an non-empty struct
 		// Possibly an error message is provided with the reason why the provided json is not accepted
-		logstashMessageGeneric, decodeError := isValidJsonMessage(m.Data)
+		logstashMessageGeneric, decodeError := validJsonMessage(m.Data)
 		if logstashMessageGeneric == (LogstashMessageGeneric{}) {
 			js, err = createLogstashMessage(m, a.docker_host, a.use_v0, a.logstash_type, decodeError)
 			if err != nil {
@@ -170,6 +170,9 @@ func (a *RedisAdapter) Stream(logstream chan *router.Message) {
 		} else {
 			// merge Docker fields into provided json
 			js, _ = json.Marshal(mergedWithdockerFields(m, logstashMessageGeneric, a.docker_host))
+		}
+		if debug {
+			log.Printf("Json: %s", js)
 		}
 		_, err = conn.Do("RPUSH", a.key, js)
 		if err != nil {
@@ -317,11 +320,17 @@ func mergedWithdockerFields(m *router.Message, obj LogstashMessageGeneric, docke
 	return local
 }
 
-func isValidJsonMessage(s string) (LogstashMessageGeneric, string) {
+func validJsonMessage(s string) (LogstashMessageGeneric, string) {
 	var msg LogstashMessageGeneric
 	err := json.Unmarshal([]byte(s), &msg)
 	if err != nil {
 		// Unmarshalling not possible, message not valid as json
+		return LogstashMessageGeneric{}, ""
+	}
+	if msg.Timestamp == "" ||
+		msg.Sourcehost == "" ||
+		msg.Message == "" {
+		// logtype in json is an unsupported logtype
 		return LogstashMessageGeneric{}, ""
 	}
 	if !contains(AllowedTypelist, msg.Fields.Logtype) {

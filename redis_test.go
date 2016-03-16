@@ -3,6 +3,7 @@ package redis
 import (
 	"bytes"
 	"encoding/json"
+	"log"
 	"strings"
 	"testing"
 	"time"
@@ -107,6 +108,7 @@ func TestCreateLogstashMessageV0(t *testing.T) {
 	assert.Equal("4321", getString(jq, "@fields", "docker", "image_tag"))
 	assert.Equal("stderr", getString(jq, "@fields", "docker", "source"))
 	assert.Equal("tst-mesos-slave-001", getString(jq, "@fields", "docker", "docker_host"))
+	assert.Equal("", getString(jq, "@fields", "decode_error"))
 
 }
 
@@ -135,16 +137,16 @@ func TestCreateLogstashMessageOptionalType(t *testing.T) {
 
 }
 
-func TestIsValidJsonMessageNoJson(t *testing.T) {
+func TestValidJsonMessageNoJson(t *testing.T) {
 	assert := assert.New(t)
 
 	js := `whateverthefuckever`
-	validJson, _ := isValidJsonMessage(js)
+	validJson, _ := validJsonMessage(js)
 	assert.Equal(validJson, LogstashMessageGeneric{})
 
 }
 
-func TestIsValidJsonMessageIncorrectLogtype(t *testing.T) {
+func TestValidJsonMessageIncorrectLogtype(t *testing.T) {
 	assert := assert.New(t)
 
 	js := `{
@@ -164,12 +166,12 @@ func TestIsValidJsonMessageIncorrectLogtype(t *testing.T) {
   },
   "@message":"hello"
 }`
-	validJson, _ := isValidJsonMessage(js)
+	validJson, _ := validJsonMessage(js)
 	assert.Equal(validJson, LogstashMessageGeneric{})
 
 }
 
-func TestIsValidJsonMessageMissingGenericFields(t *testing.T) {
+func TestValidJsonMessageMissingGenericFields(t *testing.T) {
 	assert := assert.New(t)
 
 	js := `{
@@ -188,13 +190,13 @@ func TestIsValidJsonMessageMissingGenericFields(t *testing.T) {
   },
   "@message":"hello"
 }`
-	validJson, err := isValidJsonMessage(js)
+	validJson, err := validJsonMessage(js)
 	assert.True(strings.Contains(err, MISSING_FIELDS_MESSAGE))
 	assert.Equal(validJson, LogstashMessageGeneric{})
 
 }
 
-func TestIsValidJsonMessage(t *testing.T) {
+func TestValidJsonMessage(t *testing.T) {
 	assert := assert.New(t)
 
 	js := `{
@@ -214,7 +216,8 @@ func TestIsValidJsonMessage(t *testing.T) {
   },
   "@message":"hello"
 }`
-	validJson, _ := isValidJsonMessage(js)
+	validJson, _ := validJsonMessage(js)
+	//log.Printf("value: %s", validJson.Message)
 	assert.NotEqual(validJson, LogstashMessageGeneric{})
 
 }
@@ -256,6 +259,8 @@ func TestMergedWithdockerFields(t *testing.T) {
 	}
 
 	msg = mergedWithdockerFields(&m, msg, "tst-mesos-slave-001")
+	js, _ := json.Marshal(msg)
+	log.Printf("to json: %s", js)
 
 	assert.Equal("f00ffd9428dc", msg.Fields.Docker.CID)
 	assert.Equal("my.registry.host:443/path/to/image", msg.Fields.Docker.Image)
