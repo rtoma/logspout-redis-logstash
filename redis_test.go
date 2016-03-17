@@ -132,6 +132,7 @@ func TestCreateLogstashMessageOptionalType(t *testing.T) {
 
 	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", true, "", "")
 	jq := makeQuery(msg)
+	log.Printf("to json: %s", msg)
 
 	assert.Equal("", getString(jq, "@type"))
 
