@@ -85,10 +85,10 @@ type LogstashMessageV1 struct {
 }
 
 type LogstashMessageGeneric struct {
-	Sourcehost string        `json:"host"`
+	Sourcehost string        `json:"@source_host"`
 	Timestamp  string        `json:"@timestamp"`
 	Fields     GenericFields `json:"@fields"`
-	Message    string        `json:"message"`
+	Message    string        `json:"@message"`
 }
 
 func init() {

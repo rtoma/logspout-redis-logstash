@@ -150,7 +150,7 @@ func TestValidJsonMessageIncorrectLogtype(t *testing.T) {
 	assert := assert.New(t)
 
 	js := `{
-  "host":"test.here.com",
+  "@source_host":"test.here.com",
   "@timestamp":"2013-10-24T09:30:46.947024155+02:00",
   "@fields":{
        "log_type": "wrong",
@@ -164,7 +164,7 @@ func TestValidJsonMessageIncorrectLogtype(t *testing.T) {
       "role": "kevlar-app",
       "application": "kevlar"
   },
-  "message":"hello"
+  "@message":"hello"
 }`
 	validJson, _ := validJsonMessage(js)
 	assert.Equal(validJson, LogstashMessageGeneric{})
@@ -175,7 +175,7 @@ func TestValidJsonMessageMissingGenericFields(t *testing.T) {
 	assert := assert.New(t)
 
 	js := `{
-  "host":"test.here.com",
+  "@source_host":"test.here.com",
   "@timestamp":"2013-10-24T09:30:46.947024155+02:00",
   "@fields":{
        "log_type": "generic",
@@ -188,7 +188,7 @@ func TestValidJsonMessageMissingGenericFields(t *testing.T) {
       "role": "kevlar-app",
       "application": "kevlar"
   },
-  "message":"hello"
+  "@message":"hello"
 }`
 	validJson, err := validJsonMessage(js)
 	assert.True(strings.Contains(err, MISSING_FIELDS_MESSAGE))
@@ -200,7 +200,7 @@ func TestValidJsonMessage(t *testing.T) {
 	assert := assert.New(t)
 
 	js := `{
-  "host":"test.here.com",
+  "@source_host":"test.here.com",
   "@timestamp":"2013-10-24T09:30:46.947024155+02:00",
   "@fields":{
        "log_type": "generic",
@@ -214,7 +214,7 @@ func TestValidJsonMessage(t *testing.T) {
       "role": "kevlar-app",
       "application": "kevlar"
   },
-  "message":"hello"
+  "@message":"hello"
 }`
 	validJson, _ := validJsonMessage(js)
 	//log.Printf("value: %s", validJson.Message)
