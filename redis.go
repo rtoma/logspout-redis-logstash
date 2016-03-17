@@ -47,7 +47,7 @@ type GenericItems struct {
 type GenericFields struct {
 	Docker      DockerFields `json:"docker"`
 	Logtype     string       `json:"log_type"`
-	Generic     GenericItems `json:generic`
+	Generic     GenericItems `json:"generic"`
 	Instance    string       `json:"instance"`
 	Role        string       `json:"role"`
 	Application string       `json:"application"`
@@ -64,7 +64,7 @@ type DockerFields struct {
 
 type LogstashFields struct {
 	Docker      DockerFields `json:"docker"`
-	Decodeerror string       `json:"decode_error`
+	Decodeerror string       `json:"decode_error"`
 }
 
 type LogstashMessageV0 struct {
@@ -80,7 +80,7 @@ type LogstashMessageV1 struct {
 	Timestamp   string       `json:"@timestamp"`
 	Sourcehost  string       `json:"host"`
 	Message     string       `json:"message"`
-	Decodeerror string       `json:"decode_error`
+	Decodeerror string       `json:"decode_error"`
 	Fields      DockerFields `json:"docker"`
 }
 
