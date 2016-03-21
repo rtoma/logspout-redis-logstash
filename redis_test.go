@@ -3,7 +3,7 @@ package redis
 import (
 	"bytes"
 	"encoding/json"
-	"log"
+	//"log"
 	"testing"
 	"time"
 
@@ -96,7 +96,7 @@ func TestCreateLogstashMessageOptionalType(t *testing.T) {
 
 	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", true, "")
 	jq := makeQuery(msg)
-	log.Printf("Standard message: %s", msg)
+	//log.Printf("Standard message: %s", msg)
 
 	assert.Equal("", getString(jq, "@type"))
 
@@ -125,8 +125,6 @@ func TestCreateLogstashMessageWithJsonData(t *testing.T) {
 
 	assert.Equal("something happened", getString(jq, "message"))
 
-	log.Printf("Dynamic message: %s", msg)
-
 }
 
 func TestCreateLogstashMessageWithJsonDataAndNoMessage(t *testing.T) {
@@ -151,8 +149,6 @@ func TestCreateLogstashMessageWithJsonDataAndNoMessage(t *testing.T) {
 	jq := makeQuery(msg)
 
 	assert.Equal("no message", getString(jq, "message"))
-
-	log.Printf("Dynamic message: %s", msg)
 
 }
 
@@ -179,8 +175,6 @@ func TestCreateLogstashMessageWithJsonDataAndNoLogtype(t *testing.T) {
 
 	assert.Equal("", getString(jq, "logtype"))
 
-	log.Printf("Dynamic message: %s", msg)
-
 }
 
 func TestCreateLogstashMessageWithJsonDataAndUnknownLogtype(t *testing.T) {
@@ -206,7 +200,32 @@ func TestCreateLogstashMessageWithJsonDataAndUnknownLogtype(t *testing.T) {
 
 	assert.Equal("", getString(jq, "logtype"))
 
-	log.Printf("Dynamic message: %s", msg)
+}
+
+func TestCreateLogstashMessageWithJsonDataAndAccesLogtype(t *testing.T) {
+
+	assert := assert.New(t)
+
+	m := router.Message{
+		Container: &docker.Container{
+			ID:   "6feffd9428dc",
+			Name: "/my_app",
+			Config: &docker.Config{
+				Hostname: "container_hostname",
+				Image:    "my.registry.host:443/path/to/image:1234",
+			},
+		},
+		Source: "stdout",
+		Data:   `{"agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/49.0.2623.87 Safari/537.36","auth":"-","bytes":3488,"client":"[::1]:50393","cookies":"JSESSIONID=eqsjg19bvla01dst8smi6d0f; bol.workbench.remember=emicklei; dev_appserver_login=test@example.com:False:185804764220139124118; _ga=GA1.1.1754835192.1422042636; ","httpversion":"HTTP/1.1","ident":"-","jsession_id":"","logtype":"accesslog","message":"/internal/apidocs.json/v1/policies","mime":"application/json","referrer":"http://localhost:9191/internal/apidocs/","response":200,"site":"localhost:9191","ssl":"false","time_in_sec":0,"time_in_usec":613,"unique_id":"","verb":"GET"}`,
+		Time:   time.Unix(int64(1453818496), 595000000),
+	}
+
+	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", false, "my-type")
+	jq := makeQuery(msg)
+
+	assert.Equal("accesslog", getString(jq, "logtype"))
+
+	//log.Printf("Dynamic message: %s", msg)
 
 }
 
@@ -215,6 +234,14 @@ func TestValidJsonMessageNoJson(t *testing.T) {
 
 	js := `whateverthefuckever`
 	assert.False(validJsonMessage(js))
+
+}
+
+func TestValidJsonMessageJson(t *testing.T) {
+	assert := assert.New(t)
+
+	js := `{"message":"foo"}`
+	assert.True(validJsonMessage(js))
 
 }
 

@@ -27,6 +27,9 @@ var (
 const (
 	MISSING_FIELDS_MESSAGE   = "Missing required fields for logtype"
 	MANDATORY_FIELDS_GENERIC = "level, threadid, file, line"
+	NO_MESSAGE_PROVIDED      = "no message"
+	LOGTYPE_APPLICATIONLOG   = "applog"
+	LOGTYPE_ACCESSLOG        = "accesslog"
 )
 
 type RedisAdapter struct {
@@ -48,14 +51,15 @@ type DockerFields struct {
 }
 
 type LogstashMessageV1 struct {
-	Type               string                 `json:"@type,omitempty"`
-	Timestamp          string                 `json:"@timestamp"`
-	Sourcehost         string                 `json:"host"`
-	Message            string                 `json:"message"`
-	Logtype            string                 `json:"logtype,omitempty"`
-	LogtypeAppfields   map[string]interface{} `json:"applog,omitempty"`
-	LogtypeEventfields map[string]interface{} `json:"event,omitempty"`
-	Fields             DockerFields           `json:"docker"`
+	Type                string                 `json:"@type,omitempty"`
+	Timestamp           string                 `json:"@timestamp"`
+	Sourcehost          string                 `json:"host"`
+	Message             string                 `json:"message"`
+	Logtype             string                 `json:"logtype,omitempty"`
+	LogtypeAccessfields map[string]interface{} `json:"accesslog,omitempty"`
+	LogtypeAppfields    map[string]interface{} `json:"applog,omitempty"`
+	LogtypeEventfields  map[string]interface{} `json:"event,omitempty"`
+	Fields              DockerFields           `json:"docker"`
 }
 
 func init() {
@@ -232,14 +236,15 @@ func createLogstashMessage(m *router.Message, docker_host string, use_v0 bool, l
 	msg.Fields.Source = m.Source
 	msg.Fields.DockerHost = docker_host
 
+	// Check if the message to log itself is json
 	if validJsonMessage(m.Data) {
+		// So it is, include it in the LogstashmessageV1
 		msg.UnmarshalDynamicJSON([]byte(m.Data))
-		//msg.Dyns.Level = "aha"
-		//}
 		if msg.Message == "" {
-			msg.Message = "no message"
+			msg.Message = NO_MESSAGE_PROVIDED
 		}
 	} else {
+		// Regular logging (no json)
 		msg.Message = m.Data
 	}
 
@@ -266,8 +271,9 @@ func (d *LogstashMessageV1) UnmarshalDynamicJSON(data []byte) error {
 		return err
 	}
 
+	// Take logtype and message out of the hash, and
 	if _, ok := dynMap["logtype"]; ok {
-		if dynMap["logtype"].(string) == "applog" {
+		if dynMap["logtype"].(string) == LOGTYPE_APPLICATIONLOG || dynMap["logtype"].(string) == LOGTYPE_ACCESSLOG {
 			d.Logtype = dynMap["logtype"].(string)
 		}
 		delete(dynMap, "logtype")
@@ -277,24 +283,24 @@ func (d *LogstashMessageV1) UnmarshalDynamicJSON(data []byte) error {
 		delete(dynMap, "message")
 	}
 
-	if d.Logtype == "applog" {
+	// Only initialize the "used" hash in struct
+	if d.Logtype == LOGTYPE_APPLICATIONLOG {
 		d.LogtypeAppfields = make(map[string]interface{}, 0)
+	} else if d.Logtype == LOGTYPE_ACCESSLOG {
+		d.LogtypeAccessfields = make(map[string]interface{}, 0)
 	} else {
 		d.LogtypeEventfields = make(map[string]interface{}, 0)
 	}
 
+	// Fill the right hash based on logtype
 	for key, val := range dynMap {
-		//if key == "logtype" {
-		//d.Logtype = val.(string)
-		//} else if key == "message" {
-		//	d.Message = val.(string)
-		//} else {
-		if d.Logtype == "applog" {
+		if d.Logtype == LOGTYPE_APPLICATIONLOG {
 			d.LogtypeAppfields[key] = val
+		} else if d.Logtype == LOGTYPE_ACCESSLOG {
+			d.LogtypeAccessfields[key] = val
 		} else {
 			d.LogtypeEventfields[key] = val
 		}
-		//}
 	}
 
 	return nil
