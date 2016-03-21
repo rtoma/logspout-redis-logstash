@@ -51,11 +51,12 @@ type DockerFields struct {
 }
 
 type LogstashMessageV1 struct {
-	Type                string                 `json:"@type,omitempty"`
-	Timestamp           string                 `json:"@timestamp"`
-	Sourcehost          string                 `json:"host"`
-	Message             string                 `json:"message"`
-	Logtype             string                 `json:"logtype,omitempty"`
+	Type       string `json:"@type,omitempty"`
+	Timestamp  string `json:"@timestamp"`
+	Sourcehost string `json:"host"`
+	Message    string `json:"message"`
+	Logtype    string `json:"logtype,omitempty"`
+	// Only one of the following 3 is initialized and used, depending on the incoming json:logtype
 	LogtypeAccessfields map[string]interface{} `json:"accesslog,omitempty"`
 	LogtypeAppfields    map[string]interface{} `json:"applog,omitempty"`
 	LogtypeEventfields  map[string]interface{} `json:"event,omitempty"`
@@ -271,13 +272,14 @@ func (d *LogstashMessageV1) UnmarshalDynamicJSON(data []byte) error {
 		return err
 	}
 
-	// Take logtype and message out of the hash, and
-	if _, ok := dynMap["logtype"]; ok {
+	// Take logtype of the hash, but only if it is a valid logtype
+	if _, ok := dynMap["logtype"].(string); ok {
 		if dynMap["logtype"].(string) == LOGTYPE_APPLICATIONLOG || dynMap["logtype"].(string) == LOGTYPE_ACCESSLOG {
 			d.Logtype = dynMap["logtype"].(string)
+			delete(dynMap, "logtype")
 		}
-		delete(dynMap, "logtype")
 	}
+	// Take message out of the hash
 	if _, ok := dynMap["message"]; ok {
 		d.Message = dynMap["message"].(string)
 		delete(dynMap, "message")

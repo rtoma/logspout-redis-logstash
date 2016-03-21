@@ -3,7 +3,7 @@ package redis
 import (
 	"bytes"
 	"encoding/json"
-	//"log"
+	"log"
 	"testing"
 	"time"
 
@@ -197,7 +197,7 @@ func TestCreateLogstashMessageWithJsonDataAndUnknownLogtype(t *testing.T) {
 
 	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", false, "my-type")
 	jq := makeQuery(msg)
-
+	log.Printf("Dynamic message: %s", msg)
 	assert.Equal("", getString(jq, "logtype"))
 
 }
@@ -226,6 +226,33 @@ func TestCreateLogstashMessageWithJsonDataAndAccesLogtype(t *testing.T) {
 	assert.Equal("accesslog", getString(jq, "logtype"))
 
 	//log.Printf("Dynamic message: %s", msg)
+
+}
+
+func TestCreateLogstashMessageWithJsonDataAndNumericLogtype(t *testing.T) {
+
+	assert := assert.New(t)
+
+	m := router.Message{
+		Container: &docker.Container{
+			ID:   "6feffd9428dc",
+			Name: "/my_app",
+			Config: &docker.Config{
+				Hostname: "container_hostname",
+				Image:    "my.registry.host:443/path/to/image:1234",
+			},
+		},
+		Source: "stdout",
+		Data:   `{ "logtype": 1, "message":"here i am!", "level": "DEBUG", "file": "debug.go", "line": 42}`,
+		Time:   time.Unix(int64(1453818496), 595000000),
+	}
+
+	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", false, "my-type")
+	jq := makeQuery(msg)
+
+	assert.Equal("", getString(jq, "logtype"))
+
+	log.Printf("Dynamic message: %s", msg)
 
 }
 
