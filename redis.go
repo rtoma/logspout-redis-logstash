@@ -20,16 +20,10 @@ import (
 	"github.com/gliderlabs/logspout/router"
 )
 
-var (
-	AllowedTypelist = []string{"generic"}
-)
-
 const (
-	MISSING_FIELDS_MESSAGE   = "Missing required fields for logtype"
-	MANDATORY_FIELDS_GENERIC = "level, threadid, file, line"
-	NO_MESSAGE_PROVIDED      = "no message"
-	LOGTYPE_APPLICATIONLOG   = "applog"
-	LOGTYPE_ACCESSLOG        = "accesslog"
+	NO_MESSAGE_PROVIDED    = "no message"
+	LOGTYPE_APPLICATIONLOG = "applog"
+	LOGTYPE_ACCESSLOG      = "accesslog"
 )
 
 type RedisAdapter struct {
@@ -48,6 +42,18 @@ type DockerFields struct {
 	ImageTag   string `json:"image_tag,omitempty"`
 	Source     string `json:"source"`
 	DockerHost string `json:"docker_host,omitempty"`
+}
+
+type LogstashFields struct {
+	Docker DockerFields `json:"docker"`
+}
+
+type LogstashMessageV0 struct {
+	Type       string         `json:"@type,omitempty"`
+	Timestamp  string         `json:"@timestamp"`
+	Sourcehost string         `json:"@source_host"`
+	Message    string         `json:"@message"`
+	Fields     LogstashFields `json:"@fields"`
 }
 
 type LogstashMessageV1 struct {
@@ -225,34 +231,50 @@ func createLogstashMessage(m *router.Message, docker_host string, use_v0 bool, l
 	name := m.Container.Name[1:]
 	timestamp := m.Time.UTC().Format(time.RFC3339Nano)
 
-	msg := LogstashMessageV1{}
+	if use_v0 {
+		msg := LogstashMessageV0{}
 
-	msg.Type = logstash_type
-	msg.Timestamp = timestamp
-	msg.Sourcehost = m.Container.Config.Hostname
-	msg.Fields.CID = cid
-	msg.Fields.Name = name
-	msg.Fields.Image = image
-	msg.Fields.ImageTag = image_tag
-	msg.Fields.Source = m.Source
-	msg.Fields.DockerHost = docker_host
-
-	// Check if the message to log itself is json
-	if validJsonMessage(m.Data) {
-		// So it is, include it in the LogstashmessageV1
-		err := msg.UnmarshalDynamicJSON([]byte(m.Data))
-		if err != nil {
-			// Can't unmarshall the json (invalid?), put it in message
-			msg.Message = m.Data
-		} else if msg.Message == "" {
-			msg.Message = NO_MESSAGE_PROVIDED
-		}
-	} else {
-		// Regular logging (no json)
+		msg.Type = logstash_type
+		msg.Timestamp = timestamp
 		msg.Message = m.Data
-	}
+		msg.Sourcehost = m.Container.Config.Hostname
+		msg.Fields.Docker.CID = cid
+		msg.Fields.Docker.Name = name
+		msg.Fields.Docker.Image = image
+		msg.Fields.Docker.ImageTag = image_tag
+		msg.Fields.Docker.Source = m.Source
+		msg.Fields.Docker.DockerHost = docker_host
 
-	return json.Marshal(msg)
+		return json.Marshal(msg)
+	} else {
+		msg := LogstashMessageV1{}
+
+		msg.Type = logstash_type
+		msg.Timestamp = timestamp
+		msg.Sourcehost = m.Container.Config.Hostname
+		msg.Fields.CID = cid
+		msg.Fields.Name = name
+		msg.Fields.Image = image
+		msg.Fields.ImageTag = image_tag
+		msg.Fields.Source = m.Source
+		msg.Fields.DockerHost = docker_host
+
+		// Check if the message to log itself is json
+		if validJsonMessage(strings.TrimSpace(m.Data)) {
+			// So it is, include it in the LogstashmessageV1
+			err := msg.UnmarshalDynamicJSON([]byte(m.Data))
+			if err != nil {
+				// Can't unmarshall the json (invalid?), put it in message
+				msg.Message = m.Data
+			} else if msg.Message == "" {
+				msg.Message = NO_MESSAGE_PROVIDED
+			}
+		} else {
+			// Regular logging (no json)
+			msg.Message = m.Data
+		}
+		return json.Marshal(msg)
+	}
 
 }
 

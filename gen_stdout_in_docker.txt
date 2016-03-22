@@ -1,1 +1,0 @@
-echo "{\"@source_host\":\"test.here.com\", \"@timestamp\":\"2013-10-24T09:30:46.947024155+02:00\", \"@fields\":{ \"log_type\": \"generic\", \"generic\": { \"level\":\"INFO\", \"threadid\":\"400004\", \"file\":\"file.go\", \"line\":10 }, \"instance\": \"001\", \"role\": \"kevlar-app\", \"application\": \"kevlar\"}, \"@message\":\"hello\"}" > /proc/1/fd/1
