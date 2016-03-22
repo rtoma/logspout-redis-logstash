@@ -240,8 +240,11 @@ func createLogstashMessage(m *router.Message, docker_host string, use_v0 bool, l
 	// Check if the message to log itself is json
 	if validJsonMessage(m.Data) {
 		// So it is, include it in the LogstashmessageV1
-		msg.UnmarshalDynamicJSON([]byte(m.Data))
-		if msg.Message == "" {
+		err := msg.UnmarshalDynamicJSON([]byte(m.Data))
+		if err != nil {
+			// Can't unmarshall the json (invalid?), put it in message
+			msg.Message = m.Data
+		} else if msg.Message == "" {
 			msg.Message = NO_MESSAGE_PROVIDED
 		}
 	} else {
