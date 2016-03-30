@@ -244,6 +244,7 @@ func TestCreateLogstashMessageWithJsonDataAndUnknownLogtype(t *testing.T) {
 
 	assert.Equal("here i am again!", getString(jq, "message"))
 	assert.Equal("", getString(jq, "logtype"))
+	assert.Equal("nolog", getString(jq, "event", "logtype"))
 	assert.Equal("INFO", getString(jq, "event", "level"))
 	assert.Equal("bla.go", getString(jq, "event", "file"))
 	assert.Equal(24, getInt(jq, "event", "line"))
