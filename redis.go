@@ -8,15 +8,22 @@ package redis
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
-	"strconv"
 
 	"github.com/garyburd/redigo/redis"
 	"github.com/gliderlabs/logspout/router"
+)
+
+const (
+	NO_MESSAGE_PROVIDED    = "no message"
+	LOGTYPE_APPLICATIONLOG = "applog"
+	LOGTYPE_ACCESSLOG      = "accesslog"
 )
 
 type RedisAdapter struct {
@@ -55,6 +62,11 @@ type LogstashMessageV1 struct {
 	Sourcehost string       `json:"host"`
 	Message    string       `json:"message"`
 	Fields     DockerFields `json:"docker"`
+	Logtype    string       `json:"logtype,omitempty"`
+	// Only one of the following 3 is initialized and used, depending on the incoming json:logtype
+	LogtypeAccessfields map[string]interface{} `json:"accesslog,omitempty"`
+	LogtypeAppfields    map[string]interface{} `json:"applog,omitempty"`
+	LogtypeEventfields  map[string]interface{} `json:"event,omitempty"`
 }
 
 func init() {
@@ -215,42 +227,104 @@ func createLogstashMessage(m *router.Message, docker_host string, use_v0 bool, l
 	name := m.Container.Name[1:]
 	timestamp := m.Time.UTC().Format(time.RFC3339Nano)
 
-	var msg interface{}
-
 	if use_v0 {
-		msg = LogstashMessageV0{
-			Type:       logstash_type,
-			Message:    m.Data,
-			Timestamp:  timestamp,
-			Sourcehost: m.Container.Config.Hostname,
-			Fields: LogstashFields{
-				Docker: DockerFields{
-					CID:        cid,
-					Name:       name,
-					Image:      image,
-					ImageTag:   image_tag,
-					Source:     m.Source,
-					DockerHost: docker_host,
-				},
-			},
-		}
+		msg := LogstashMessageV0{}
+
+		msg.Type = logstash_type
+		msg.Timestamp = timestamp
+		msg.Message = m.Data
+		msg.Sourcehost = m.Container.Config.Hostname
+		msg.Fields.Docker.CID = cid
+		msg.Fields.Docker.Name = name
+		msg.Fields.Docker.Image = image
+		msg.Fields.Docker.ImageTag = image_tag
+		msg.Fields.Docker.Source = m.Source
+		msg.Fields.Docker.DockerHost = docker_host
+
+		return json.Marshal(msg)
 	} else {
-		msg = LogstashMessageV1{
-			Type:       logstash_type,
-			Message:    m.Data,
-			Timestamp:  timestamp,
-			Sourcehost: m.Container.Config.Hostname,
-			Fields: DockerFields{
-				CID:        cid,
-				Name:       name,
-				Image:      image,
-				ImageTag:   image_tag,
-				Source:     m.Source,
-				DockerHost: docker_host,
-			},
+		msg := LogstashMessageV1{}
+
+		msg.Type = logstash_type
+		msg.Timestamp = timestamp
+		msg.Sourcehost = m.Container.Config.Hostname
+		msg.Fields.CID = cid
+		msg.Fields.Name = name
+		msg.Fields.Image = image
+		msg.Fields.ImageTag = image_tag
+		msg.Fields.Source = m.Source
+		msg.Fields.DockerHost = docker_host
+
+		// Check if the message to log itself is json
+		if validJsonMessage(strings.TrimSpace(m.Data)) {
+			// So it is, include it in the LogstashmessageV1
+			err := msg.UnmarshalDynamicJSON([]byte(m.Data))
+			if err != nil {
+				// Can't unmarshall the json (invalid?), put it in message
+				msg.Message = m.Data
+			} else if msg.Message == "" {
+				msg.Message = NO_MESSAGE_PROVIDED
+			}
+		} else {
+			// Regular logging (no json)
+			msg.Message = m.Data
+		}
+		return json.Marshal(msg)
+	}
+
+}
+
+func validJsonMessage(s string) bool {
+
+	if !strings.HasPrefix(s, "{") || !strings.HasSuffix(s, "}") {
+		return false
+	}
+	return true
+}
+
+func (d *LogstashMessageV1) UnmarshalDynamicJSON(data []byte) error {
+	var dynMap map[string]interface{}
+
+	if d == nil {
+		return errors.New("RawString: UnmarshalJSON on nil pointer")
+	}
+
+	if err := json.Unmarshal(data, &dynMap); err != nil {
+		return err
+	}
+
+	// Take logtype of the hash, but only if it is a valid logtype
+	if _, ok := dynMap["logtype"].(string); ok {
+		if dynMap["logtype"].(string) == LOGTYPE_APPLICATIONLOG || dynMap["logtype"].(string) == LOGTYPE_ACCESSLOG {
+			d.Logtype = dynMap["logtype"].(string)
+			delete(dynMap, "logtype")
+		}
+	}
+	// Take message out of the hash
+	if _, ok := dynMap["message"]; ok {
+		d.Message = dynMap["message"].(string)
+		delete(dynMap, "message")
+	}
+
+	// Only initialize the "used" hash in struct
+	if d.Logtype == LOGTYPE_APPLICATIONLOG {
+		d.LogtypeAppfields = make(map[string]interface{}, 0)
+	} else if d.Logtype == LOGTYPE_ACCESSLOG {
+		d.LogtypeAccessfields = make(map[string]interface{}, 0)
+	} else {
+		d.LogtypeEventfields = make(map[string]interface{}, 0)
+	}
+
+	// Fill the right hash based on logtype
+	for key, val := range dynMap {
+		if d.Logtype == LOGTYPE_APPLICATIONLOG {
+			d.LogtypeAppfields[key] = val
+		} else if d.Logtype == LOGTYPE_ACCESSLOG {
+			d.LogtypeAccessfields[key] = val
+		} else {
+			d.LogtypeEventfields[key] = val
 		}
 	}
 
-	return json.Marshal(msg)
-
+	return nil
 }
