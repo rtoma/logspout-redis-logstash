@@ -1,7 +1,7 @@
 # logspout-redis-logstash
 [Logspout](https://github.com/gliderlabs/logspout) adapter for writing Docker container stdout/stderr logs to Redis in Logstash jsonevent layout.
 
-See the example below for more information.
+Since v0.1.4 JSON input is supported, enabling you to add structure to your logs.
 
 
 ## Docker image available
@@ -36,8 +36,95 @@ This table shows all configuration parameters:
 | Redis key, events will be pushed to this Redis list object | 'logspout' | REDIS_KEY | key |
 | Redis database, if set the adapter will execute a Redis SELECT command | 0 | REDIS_DATABASE | database |
 | Docker host, will add a docker.host=\<host\> field to the event, allowing you to add the hostname of your host, identifying where your container was running (think mesos) | none | REDIS\_DOCKER\_HOST | docker_host |
-| Use Layout v0, what Logstash json format is used | false (meaning we use v1) | REDIS\_USE\_V0\_LAYOUT | use_v0_layout |
+| Use Layout v0, what Logstash json format is used. With v0 JSON input support is disabled. | false (meaning we use v1) | REDIS\_USE\_V0\_LAYOUT | use_v0_layout |
 | Logstash type, if set the event will get a @type property | none | REDIS\_LOGSTASH\_TYPE | logstash_type |
+
+
+## JSON input support
+
+**Note:** this does not work when using the Logstash v0 layout.
+
+Since v0.1.4 JSON input is supported, enabling you to add structure to your logs. Big words, but this is what it does.
+
+Imagine your docker application to emit a log to stdout like:
+
+```
+{"message":"I was very busy","items_processed":42,"elapsed_time_ms":123}
+```
+
+Logspout-redis-logstash will recognize this log as a JSON string and will embed the fields into the JSON document. This is how the final JSON document looks like that will be send to Redis:
+
+```
+{
+  "@timestamp": "2016-03-30T09:54:24.587277635Z",
+  "host": "ef5fe78b6a8e",
+  "message": "I was very busy",
+  "docker": { ... },
+  "event": {
+    "elapsed_time_ms": 123,
+    "items_processed": 42
+  }
+}
+```
+
+What just happened?
+
+- the `message` field is set with the value from our input document.
+- the document contains a `event` hash filled with all input fields (ex message)
+
+### Logtypes
+
+Using the `logtype` field in the input JSON doc, allows you to control the name of the field hash. This was added to give you some control over different logtypes you may want to implement.
+
+Usecase: imagine you have an application that handles HTTP requests and wants to emit acceslog and applicationlog events. These events are different and you want to handle them differently.
+
+We currently support two types:
+
+- accesslog
+- applog
+
+Example input JSON to illustrate this "data wrangling" feature:
+
+```
+{"logtype":"applog","message":"something went bOOm!","level":"ERROR","line":42,"file":"source.go"}
+```
+
+Which results in this JSON doc for Redis:
+
+```
+{
+  "@timestamp": "2016-03-30T10:03:00.016733514Z",
+  "host": "16cecd099d78",
+  "message": "something went bOOm!",
+  "docker": { ... },
+  "logtype": "applog",
+  "applog": {
+    "file": "source.go",
+    "level": "ERROR",
+    "line": 42
+  }
+}
+```
+
+See what happened?
+
+- the `logtype` field is added and is set with the value from our input doc.
+- the `event` hash is now called `applog`, because of the logtype
+
+If you'd used `"logtype":"accesslog"` the JSON doc would have looked like:
+
+```
+{
+  ... ,
+  "logtype": "accesslog",
+  "accesslog": {
+    "file": "source.go",
+    "level": "ERROR",
+    "line": 42
+  }
+}
+```
+
 
 
 ## Contribution
@@ -46,7 +133,12 @@ Want to add features? Feel welcome to submit a pull request!
 
 If you are unable to code, feel free to create a issue describing your feature request or bug report. 
 
+
 ## Changelog
+
+### 0.1.4
+
+- Added support for JSON input. See the paragraph for more information. Thanks to dickiedick62!
 
 ### 0.1.3
 
@@ -86,5 +178,7 @@ Will result in a corresponding event in Elasticsearch. Below is a screenshot fro
 ## Credits
 
 Thanks to [Gliderlabs](https://github.com/gliderlabs) for creating Logspout!
+
+Much thanks to all contributors.
 
 For other credits see the header of the redis.go source file.
