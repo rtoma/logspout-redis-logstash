@@ -57,16 +57,16 @@ type LogstashMessageV0 struct {
 }
 
 type LogstashMessageV1 struct {
-	Type       string `json:"@type,omitempty"`
-	Timestamp  string `json:"@timestamp"`
-	Sourcehost string `json:"host"`
-	Message    string `json:"message"`
-	Logtype    string `json:"logtype,omitempty"`
+	Type       string       `json:"@type,omitempty"`
+	Timestamp  string       `json:"@timestamp"`
+	Sourcehost string       `json:"host"`
+	Message    string       `json:"message"`
+	Fields     DockerFields `json:"docker"`
+	Logtype    string       `json:"logtype,omitempty"`
 	// Only one of the following 3 is initialized and used, depending on the incoming json:logtype
 	LogtypeAccessfields map[string]interface{} `json:"accesslog,omitempty"`
 	LogtypeAppfields    map[string]interface{} `json:"applog,omitempty"`
 	LogtypeEventfields  map[string]interface{} `json:"event,omitempty"`
-	Fields              DockerFields           `json:"docker"`
 }
 
 func init() {
@@ -130,9 +130,6 @@ func (a *RedisAdapter) Stream(logstream chan *router.Message) {
 	mute := false
 
 	for m := range logstream {
-
-		//var js []byte
-		//var err error
 		js, err := createLogstashMessage(m, a.docker_host, a.use_v0, a.logstash_type)
 		if err != nil {
 			if !mute {
@@ -141,7 +138,6 @@ func (a *RedisAdapter) Stream(logstream chan *router.Message) {
 			}
 			continue
 		}
-
 		_, err = conn.Do("RPUSH", a.key, js)
 		if err != nil {
 			if !mute {

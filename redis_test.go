@@ -159,6 +159,10 @@ func TestCreateLogstashMessageWithJsonData(t *testing.T) {
 	jq := makeQuery(msg)
 
 	assert.Equal("something happened", getString(jq, "message"))
+	assert.Equal("applog", getString(jq, "logtype"))
+	assert.Equal("DEBUG", getString(jq, "applog", "level"))
+	assert.Equal("debug.go", getString(jq, "applog", "file"))
+	assert.Equal(42, getInt(jq, "applog", "line"))
 
 }
 
@@ -176,7 +180,7 @@ func TestCreateLogstashMessageWithJsonDataAndNoMessage(t *testing.T) {
 			},
 		},
 		Source: "stdout",
-		Data:   `{ "logtype": "applog", "level": "DEBUG", "file": "debug.go", "line": 42}`,
+		Data:   `{ "logtype": "applog", "level": "DEBUG", "file": "debug.go", "line": 14}`,
 		Time:   time.Unix(int64(1453818496), 595000000),
 	}
 
@@ -208,7 +212,11 @@ func TestCreateLogstashMessageWithJsonDataAndNoLogtype(t *testing.T) {
 	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", false, "my-type")
 	jq := makeQuery(msg)
 
+	assert.Equal("here i am!", getString(jq, "message"))
 	assert.Equal("", getString(jq, "logtype"))
+	assert.Equal("DEBUG", getString(jq, "event", "level"))
+	assert.Equal("debug.go", getString(jq, "event", "file"))
+	assert.Equal(42, getInt(jq, "event", "line"))
 
 }
 
@@ -226,14 +234,19 @@ func TestCreateLogstashMessageWithJsonDataAndUnknownLogtype(t *testing.T) {
 			},
 		},
 		Source: "stdout",
-		Data:   `{ "logtype": "nolog", "message":"here i am!", "level": "DEBUG", "file": "debug.go", "line": 42}`,
+		Data:   `{ "logtype": "nolog", "message":"here i am again!", "level": "INFO", "file": "bla.go", "line": 24}`,
 		Time:   time.Unix(int64(1453818496), 595000000),
 	}
 
 	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", false, "my-type")
 	jq := makeQuery(msg)
 	//log.Printf("Dynamic message: %s", msg)
+
+	assert.Equal("here i am again!", getString(jq, "message"))
 	assert.Equal("", getString(jq, "logtype"))
+	assert.Equal("INFO", getString(jq, "event", "level"))
+	assert.Equal("bla.go", getString(jq, "event", "file"))
+	assert.Equal(24, getInt(jq, "event", "line"))
 
 }
 
@@ -259,6 +272,9 @@ func TestCreateLogstashMessageWithJsonDataAndAccesLogtype(t *testing.T) {
 	jq := makeQuery(msg)
 
 	assert.Equal("accesslog", getString(jq, "logtype"))
+	assert.Equal("/internal/apidocs.json/v1/policies", getString(jq, "message"))
+	assert.Equal(200, getInt(jq, "accesslog", "response"))
+	assert.Equal(3488, getInt(jq, "accesslog", "bytes"))
 
 	//log.Printf("Dynamic message: %s", msg)
 
@@ -286,6 +302,7 @@ func TestCreateLogstashMessageWithJsonDataAndNumericLogtype(t *testing.T) {
 	jq := makeQuery(msg)
 
 	assert.Equal("", getString(jq, "logtype"))
+	assert.Equal(42, getInt(jq, "event", "line"))
 
 	//log.Printf("Dynamic message: %s", msg)
 
@@ -332,6 +349,11 @@ func TestValidJsonMessageJson(t *testing.T) {
 	js := `{"message":"foo"}`
 	assert.True(validJsonMessage(js))
 
+}
+
+func getInt(j *jsonq.JsonQuery, s ...string) int {
+	v, _ := j.Int(s...)
+	return v
 }
 
 func getString(j *jsonq.JsonQuery, s ...string) string {
