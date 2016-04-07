@@ -136,6 +136,10 @@ If you are unable to code, feel free to create a issue describing your feature r
 
 ## Changelog
 
+### 0.1.5
+
+- Added support for Docker labels. Thanks to teemupo!
+
 ### 0.1.4
 
 - Added support for JSON input. See the paragraph for more information. Thanks to dickiedick62!
