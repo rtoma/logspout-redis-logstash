@@ -36,12 +36,13 @@ type RedisAdapter struct {
 }
 
 type DockerFields struct {
-	Name       string `json:"name"`
-	CID        string `json:"cid"`
-	Image      string `json:"image"`
-	ImageTag   string `json:"image_tag,omitempty"`
-	Source     string `json:"source"`
-	DockerHost string `json:"docker_host,omitempty"`
+	Name       string            `json:"name"`
+	CID        string            `json:"cid"`
+	Image      string            `json:"image"`
+	ImageTag   string            `json:"image_tag,omitempty"`
+	Source     string            `json:"source"`
+	DockerHost string            `json:"docker_host,omitempty"`
+	Labels     map[string]string `json:"labels,omitempty"`
 }
 
 type LogstashFields struct {
@@ -240,6 +241,7 @@ func createLogstashMessage(m *router.Message, docker_host string, use_v0 bool, l
 		msg.Fields.Docker.ImageTag = image_tag
 		msg.Fields.Docker.Source = m.Source
 		msg.Fields.Docker.DockerHost = docker_host
+		msg.Fields.Docker.Labels = m.Container.Config.Labels
 
 		return json.Marshal(msg)
 	} else {
@@ -254,6 +256,7 @@ func createLogstashMessage(m *router.Message, docker_host string, use_v0 bool, l
 		msg.Fields.ImageTag = image_tag
 		msg.Fields.Source = m.Source
 		msg.Fields.DockerHost = docker_host
+		msg.Fields.Labels = m.Container.Config.Labels
 
 		// Check if the message to log itself is json
 		if validJsonMessage(strings.TrimSpace(m.Data)) {

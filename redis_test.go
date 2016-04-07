@@ -53,6 +53,7 @@ func TestCreateLogstashMessageV1(t *testing.T) {
 			Config: &docker.Config{
 				Hostname: "container_hostname",
 				Image:    "my.registry.host:443/path/to/image:1234",
+				Labels:   map[string]string{"label_1": "abc", "label_2": "def"},
 			},
 		},
 		Source: "stdout",
@@ -73,6 +74,8 @@ func TestCreateLogstashMessageV1(t *testing.T) {
 	assert.Equal("1234", getString(jq, "docker", "image_tag"))
 	assert.Equal("stdout", getString(jq, "docker", "source"))
 	assert.Equal("tst-mesos-slave-001", getString(jq, "docker", "docker_host"))
+	assert.Equal("abc", getString(jq, "docker", "labels", "label_1"))
+	assert.Equal("def", getString(jq, "docker", "labels", "label_2"))
 
 }
 
@@ -87,6 +90,7 @@ func TestCreateLogstashMessageV0(t *testing.T) {
 			Config: &docker.Config{
 				Hostname: "container_hostname",
 				Image:    "my.registry.host:443/path/to/image:4321",
+				Labels:   map[string]string{"label_1": "abc", "label_2": "def"},
 			},
 		},
 		Source: "stderr",
@@ -108,6 +112,8 @@ func TestCreateLogstashMessageV0(t *testing.T) {
 	assert.Equal("stderr", getString(jq, "@fields", "docker", "source"))
 	assert.Equal("tst-mesos-slave-001", getString(jq, "@fields", "docker", "docker_host"))
 	assert.Equal("", getString(jq, "@fields", "decode_error"))
+	assert.Equal("abc", getString(jq, "@fields", "docker", "labels", "label_1"))
+	assert.Equal("def", getString(jq, "@fields", "docker", "labels", "label_2"))
 
 }
 
