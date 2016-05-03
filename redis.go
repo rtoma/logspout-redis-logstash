@@ -21,9 +21,12 @@ import (
 )
 
 const (
-	NO_MESSAGE_PROVIDED    = "no message"
-	LOGTYPE_APPLICATIONLOG = "applog"
-	LOGTYPE_ACCESSLOG      = "accesslog"
+	NO_MESSAGE_PROVIDED     = "no message"
+	LOGTYPE_APPLICATIONLOG  = "applog"
+	LOGTYPE_ACCESSLOG       = "accesslog"
+	DEFAULT_CONNECT_TIMEOUT = 100
+	DEFAULT_READ_TIMEOUT    = 300
+	DEFAULT_WRITE_TIMEOUT   = 500
 )
 
 type RedisAdapter struct {
@@ -33,6 +36,8 @@ type RedisAdapter struct {
 	docker_host   string
 	use_v0        bool
 	logstash_type string
+	mute_errors   bool
+	msg_counter   int
 }
 
 type DockerFields struct {
@@ -89,6 +94,11 @@ func NewRedisAdapter(route *router.Route) (router.LogAdapter, error) {
 	use_v0 := getopt(route.Options, "use_v0_layout", "REDIS_USE_V0_LAYOUT", "") != ""
 	logstash_type := getopt(route.Options, "logstash_type", "REDIS_LOGSTASH_TYPE", "")
 	debug := getopt(route.Options, "debug", "DEBUG", "") != ""
+	mute_errors := getopt(route.Options, "mute_errors", "MUTE_ERRORS", "true") == "true"
+
+	connect_timeout := getintopt(route.Options, "connect_timeout", "CONNECT_TIMEOUT", DEFAULT_CONNECT_TIMEOUT)
+	read_timeout := getintopt(route.Options, "read_timeout", "READ_TIMEOUT", DEFAULT_READ_TIMEOUT)
+	write_timeout := getintopt(route.Options, "write_timeout", "WRITE_TIMEOUT", DEFAULT_WRITE_TIMEOUT)
 
 	database_s := getopt(route.Options, "database", "REDIS_DATABASE", "0")
 	database, err := strconv.Atoi(database_s)
@@ -99,9 +109,13 @@ func NewRedisAdapter(route *router.Route) (router.LogAdapter, error) {
 	if debug {
 		log.Printf("Using Redis server '%s', dbnum: %d, password?: %t, pushkey: '%s', v0 layout?: %t, logstash type: '%s'\n",
 			address, database, password != "", key, use_v0, logstash_type)
+		log.Printf("Timeouts set, connect: %dms, read: %dms, write: %dms\n", connect_timeout, read_timeout, write_timeout)
+	}
+	if connect_timeout+read_timeout+write_timeout > 950 {
+		log.Printf("WARN: sum of connect, read & write timeouts > 950 ms. You risk loosing container logs as Logspout stops pumping logs after a 1.0 second timeout.")
 	}
 
-	pool := newRedisConnectionPool(address, password, database)
+	pool := newRedisConnectionPool(address, password, database, connect_timeout, read_timeout, write_timeout)
 
 	// lets test the water
 	conn := pool.Get()
@@ -121,6 +135,8 @@ func NewRedisAdapter(route *router.Route) (router.LogAdapter, error) {
 		docker_host:   docker_host,
 		use_v0:        use_v0,
 		logstash_type: logstash_type,
+		mute_errors:   mute_errors,
+		msg_counter:   0,
 	}, nil
 }
 
@@ -131,20 +147,31 @@ func (a *RedisAdapter) Stream(logstream chan *router.Message) {
 	mute := false
 
 	for m := range logstream {
+		a.msg_counter += 1
+		msg_id := fmt.Sprintf("%s#%d", m.Container.ID[0:12], a.msg_counter)
+
 		js, err := createLogstashMessage(m, a.docker_host, a.use_v0, a.logstash_type)
 		if err != nil {
-			if !mute {
-				log.Println("redis: error on json.Marshal (muting until recovered): ", err)
-				mute = true
+			if a.mute_errors {
+				if !mute {
+					log.Printf("redis[%s]: error on json.Marshal (muting until recovered): %s\n", msg_id, err)
+					mute = true
+				}
+			} else {
+				log.Printf("redis[%s]: error on json.Marshal: %s\n", msg_id, err)
 			}
 			continue
 		}
 		_, err = conn.Do("RPUSH", a.key, js)
 		if err != nil {
-			if !mute {
-				log.Println("redis: error on rpush (muting until restored): ", err)
-				mute = true
+			if a.mute_errors {
+				if !mute {
+					log.Printf("redis[%s]: error on rpush (muting until restored): %s\n", msg_id, err)
+				}
+			} else {
+				log.Printf("redis[%s]: error on rpush: %s\n", msg_id, err)
 			}
+			mute = true
 
 			// first close old connection
 			conn.Close()
@@ -153,11 +180,24 @@ func (a *RedisAdapter) Stream(logstream chan *router.Message) {
 			conn = a.pool.Get()
 
 			// since message is already marshaled, send again
-			_, _ = conn.Do("RPUSH", a.key, js)
+			_, err = conn.Do("RPUSH", a.key, js)
+			if err != nil {
+				conn.Close()
+				if !a.mute_errors {
+					log.Printf("redis[%s]: error on rpush (retry): %s\n", msg_id, err)
+				}
+			} else {
+				log.Printf("redis[%s]: successful retry rpush after error\n", msg_id)
+				mute = false
+			}
 
 			continue
+		} else {
+			if mute {
+				log.Printf("redis[%s]: successful rpush after error\n", msg_id)
+				mute = false
+			}
 		}
-		mute = false
 	}
 }
 
@@ -179,13 +219,33 @@ func getopt(options map[string]string, optkey string, envkey string, default_val
 	}
 	return
 }
+func getintopt(options map[string]string, optkey string, envkey string, default_value int) (value int) {
+	value_s := options[optkey]
+	if value_s == "" {
+		value_s = os.Getenv(envkey)
+	}
+	if value_s == "" {
+		value = default_value
+	} else {
+		var err error
+		value, err = strconv.Atoi(value_s)
+		if err != nil {
+			log.Printf("Invalid value for integer paramater %s: %s - using default: %d\n", optkey, value_s, default_value)
+			value = default_value
+		}
+	}
+	return
+}
 
-func newRedisConnectionPool(server, password string, database int) *redis.Pool {
+func newRedisConnectionPool(server, password string, database int, connect_timeout int, read_timeout int, write_timeout int) *redis.Pool {
 	return &redis.Pool{
-		MaxIdle:     3,
+		MaxIdle:     1,
 		IdleTimeout: 240 * time.Second,
 		Dial: func() (redis.Conn, error) {
-			c, err := redis.Dial("tcp", server)
+			c, err := redis.Dial("tcp", server,
+				redis.DialConnectTimeout(time.Duration(connect_timeout)*time.Millisecond),
+				redis.DialReadTimeout(time.Duration(read_timeout)*time.Millisecond),
+				redis.DialWriteTimeout(time.Duration(write_timeout)*time.Millisecond))
 			if err != nil {
 				return nil, err
 			}
@@ -205,6 +265,9 @@ func newRedisConnectionPool(server, password string, database int) *redis.Pool {
 		},
 		TestOnBorrow: func(c redis.Conn, t time.Time) error {
 			_, err := c.Do("PING")
+			if err != nil {
+				log.Println("redis: test on borrow failed: ", err)
+			}
 			return err
 		},
 	}
