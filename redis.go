@@ -36,6 +36,7 @@ type RedisAdapter struct {
 	docker_host   string
 	use_v0        bool
 	logstash_type string
+	dedot_labels  bool
 	mute_errors   bool
 	msg_counter   int
 }
@@ -93,6 +94,7 @@ func NewRedisAdapter(route *router.Route) (router.LogAdapter, error) {
 	docker_host := getopt(route.Options, "docker_host", "REDIS_DOCKER_HOST", "")
 	use_v0 := getopt(route.Options, "use_v0_layout", "REDIS_USE_V0_LAYOUT", "") != ""
 	logstash_type := getopt(route.Options, "logstash_type", "REDIS_LOGSTASH_TYPE", "")
+	dedot_labels := getopt(route.Options, "dedot_labels", "DEDOT_LABELS", "false") == "false"
 	debug := getopt(route.Options, "debug", "DEBUG", "") != ""
 	mute_errors := getopt(route.Options, "mute_errors", "MUTE_ERRORS", "true") == "true"
 
@@ -135,6 +137,7 @@ func NewRedisAdapter(route *router.Route) (router.LogAdapter, error) {
 		docker_host:   docker_host,
 		use_v0:        use_v0,
 		logstash_type: logstash_type,
+		dedot_labels:  dedot_labels,
 		mute_errors:   mute_errors,
 		msg_counter:   0,
 	}, nil
@@ -150,7 +153,7 @@ func (a *RedisAdapter) Stream(logstream chan *router.Message) {
 		a.msg_counter += 1
 		msg_id := fmt.Sprintf("%s#%d", m.Container.ID[0:12], a.msg_counter)
 
-		js, err := createLogstashMessage(m, a.docker_host, a.use_v0, a.logstash_type)
+		js, err := createLogstashMessage(m, a.docker_host, a.use_v0, a.logstash_type, a.dedot_labels)
 		if err != nil {
 			if a.mute_errors {
 				if !mute {
@@ -285,7 +288,19 @@ func splitImage(image_tag string) (image string, tag string) {
 	return
 }
 
-func createLogstashMessage(m *router.Message, docker_host string, use_v0 bool, logstash_type string) ([]byte, error) {
+func dedotLabels(labels map[string]string) map[string]string {
+	for key, _ := range labels {
+		if strings.Contains(key, ".") {
+			dedotted_label := strings.Replace(key, ".", "_", -1)
+			labels[dedotted_label] = labels[key]
+			delete(labels, key)
+		}
+	}
+
+	return labels
+}
+
+func createLogstashMessage(m *router.Message, docker_host string, use_v0 bool, logstash_type string, dedot_labels bool) ([]byte, error) {
 	image, image_tag := splitImage(m.Container.Config.Image)
 	cid := m.Container.ID[0:12]
 	name := m.Container.Name[1:]
@@ -304,7 +319,13 @@ func createLogstashMessage(m *router.Message, docker_host string, use_v0 bool, l
 		msg.Fields.Docker.ImageTag = image_tag
 		msg.Fields.Docker.Source = m.Source
 		msg.Fields.Docker.DockerHost = docker_host
-		msg.Fields.Docker.Labels = m.Container.Config.Labels
+
+		// see https://github.com/rtoma/logspout-redis-logstash/issues/11
+		if dedot_labels {
+			msg.Fields.Docker.Labels = dedotLabels(m.Container.Config.Labels)
+		} else {
+			msg.Fields.Docker.Labels = m.Container.Config.Labels
+		}
 
 		return json.Marshal(msg)
 	} else {
@@ -319,7 +340,13 @@ func createLogstashMessage(m *router.Message, docker_host string, use_v0 bool, l
 		msg.Fields.ImageTag = image_tag
 		msg.Fields.Source = m.Source
 		msg.Fields.DockerHost = docker_host
-		msg.Fields.Labels = m.Container.Config.Labels
+
+		// see https://github.com/rtoma/logspout-redis-logstash/issues/11
+		if dedot_labels {
+			msg.Fields.Labels = dedotLabels(m.Container.Config.Labels)
+		} else {
+			msg.Fields.Labels = m.Container.Config.Labels
+		}
 
 		// Check if the message to log itself is json
 		if validJsonMessage(strings.TrimSpace(m.Data)) {
