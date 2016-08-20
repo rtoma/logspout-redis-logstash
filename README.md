@@ -38,6 +38,7 @@ This table shows all configuration parameters:
 | Docker host, will add a docker.host=\<host\> field to the event, allowing you to add the hostname of your host, identifying where your container was running (think mesos) | none | REDIS\_DOCKER\_HOST | docker_host |
 | Use Layout v0, what Logstash json format is used. With v0 JSON input support is disabled. | false (meaning we use v1) | REDIS\_USE\_V0\_LAYOUT | use_v0_layout |
 | Logstash type, if set the event will get a @type property | none | REDIS\_LOGSTASH\_TYPE | logstash_type |
+| If true, will replace all "." in container labels with "_". You need to set this if you are using Elasticsearch 2.x | false | DEDOT_LABELS | dedot_labels |
 | Mute errors (to avoid error storm), disable by setting to other than 'true' | true | MUTE\_ERRORS | mute_errors |
 | Redis connection timeout | 100 ms | CONNECT\_TIMEOUT | connect_timeout |
 | Redis read timeout | 300 ms | READ\_TIMEOUT | read_timeout |
