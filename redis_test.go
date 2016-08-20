@@ -342,6 +342,114 @@ func TestCreateLogstashMessageWithInvalidJsonData(t *testing.T) {
 
 }
 
+func TestCreateLogstashMessageV0WithDeDottingEnabled(t *testing.T) {
+
+	assert := assert.New(t)
+
+	m := router.Message{
+		Container: &docker.Container{
+			ID:   "f00ffd9428dc",
+			Name: "/my_db",
+			Config: &docker.Config{
+				Hostname: "container_hostname",
+				Image:    "my.registry.host:443/path/to/image:4321",
+				Labels:   map[string]string{"label.1.2.3": "abc", "label.3.2.1": "def"},
+			},
+		},
+		Source: "stderr",
+		Data:   "cruel world",
+		Time:   time.Unix(int64(1453813310), 1000000),
+	}
+
+	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", true, "some-type", true)
+	jq := makeQuery(msg)
+
+	assert.Equal("abc", getString(jq, "@fields", "docker", "labels", "label_1_2_3"))
+	assert.Equal("def", getString(jq, "@fields", "docker", "labels", "label_3_2_1"))
+
+}
+
+func TestCreateLogstashMessageV1WithDeDottingEnabled(t *testing.T) {
+
+	assert := assert.New(t)
+
+	m := router.Message{
+		Container: &docker.Container{
+			ID:   "f00ffd9428dc",
+			Name: "/my_db",
+			Config: &docker.Config{
+				Hostname: "container_hostname",
+				Image:    "my.registry.host:443/path/to/image:4321",
+				Labels:   map[string]string{"label.1.2.3": "abc", "label.3.2.1": "def"},
+			},
+		},
+		Source: "stderr",
+		Data:   "cruel world",
+		Time:   time.Unix(int64(1453813310), 1000000),
+	}
+
+	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", false, "some-type", true)
+	jq := makeQuery(msg)
+
+	assert.Equal("abc", getString(jq, "@fields", "docker", "labels", "label_1_2_3"))
+	assert.Equal("def", getString(jq, "@fields", "docker", "labels", "label_3_2_1"))
+
+}
+
+func TestCreateLogstashMessageV0WithDeDottingDefaultDisabled(t *testing.T) {
+
+	assert := assert.New(t)
+
+	m := router.Message{
+		Container: &docker.Container{
+			ID:   "f00ffd9428dc",
+			Name: "/my_db",
+			Config: &docker.Config{
+				Hostname: "container_hostname",
+				Image:    "my.registry.host:443/path/to/image:4321",
+				Labels:   map[string]string{"label.1.2.3": "abc", "label.3.2.1": "def"},
+			},
+		},
+		Source: "stderr",
+		Data:   "cruel world",
+		Time:   time.Unix(int64(1453813310), 1000000),
+	}
+
+	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", true, "some-type")
+	jq := makeQuery(msg)
+
+	assert.Equal("abc", getString(jq, "@fields", "docker", "labels", "label.1.2.3"))
+	assert.Equal("def", getString(jq, "@fields", "docker", "labels", "label.3.2.1"))
+
+}
+
+func TestCreateLogstashMessageV1WithDeDottingDefaultDisabled(t *testing.T) {
+
+	assert := assert.New(t)
+
+	m := router.Message{
+		Container: &docker.Container{
+			ID:   "f00ffd9428dc",
+			Name: "/my_db",
+			Config: &docker.Config{
+				Hostname: "container_hostname",
+				Image:    "my.registry.host:443/path/to/image:4321",
+				Labels:   map[string]string{"label.1.2.3": "abc", "label.3.2.1": "def"},
+			},
+		},
+		Source: "stderr",
+		Data:   "cruel world",
+		Time:   time.Unix(int64(1453813310), 1000000),
+	}
+
+	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", false, "some-type")
+	jq := makeQuery(msg)
+
+	assert.Equal("abc", getString(jq, "@fields", "docker", "labels", "label.1.2.3"))
+	assert.Equal("def", getString(jq, "@fields", "docker", "labels", "label.3.2.1"))
+
+}
+
 func TestValidJsonMessageNoJson(t *testing.T) {
 	assert := assert.New(t)
 
