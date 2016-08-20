@@ -94,7 +94,7 @@ func NewRedisAdapter(route *router.Route) (router.LogAdapter, error) {
 	docker_host := getopt(route.Options, "docker_host", "REDIS_DOCKER_HOST", "")
 	use_v0 := getopt(route.Options, "use_v0_layout", "REDIS_USE_V0_LAYOUT", "") != ""
 	logstash_type := getopt(route.Options, "logstash_type", "REDIS_LOGSTASH_TYPE", "")
-	dedot_labels := getopt(route.Options, "dedot_labels", "DEDOT_LABELS", "false") == "false"
+	dedot_labels := getopt(route.Options, "dedot_labels", "DEDOT_LABELS", "false") != ""
 	debug := getopt(route.Options, "debug", "DEBUG", "") != ""
 	mute_errors := getopt(route.Options, "mute_errors", "MUTE_ERRORS", "true") == "true"
 
