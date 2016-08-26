@@ -94,7 +94,7 @@ func NewRedisAdapter(route *router.Route) (router.LogAdapter, error) {
 	docker_host := getopt(route.Options, "docker_host", "REDIS_DOCKER_HOST", "")
 	use_v0 := getopt(route.Options, "use_v0_layout", "REDIS_USE_V0_LAYOUT", "") != ""
 	logstash_type := getopt(route.Options, "logstash_type", "REDIS_LOGSTASH_TYPE", "")
-	dedot_labels := getopt(route.Options, "dedot_labels", "DEDOT_LABELS", "false") != ""
+	dedot_labels := getopt(route.Options, "dedot_labels", "DEDOT_LABELS", "false") == "true"
 	debug := getopt(route.Options, "debug", "DEBUG", "") != ""
 	mute_errors := getopt(route.Options, "mute_errors", "MUTE_ERRORS", "true") == "true"
 
@@ -111,6 +111,7 @@ func NewRedisAdapter(route *router.Route) (router.LogAdapter, error) {
 	if debug {
 		log.Printf("Using Redis server '%s', dbnum: %d, password?: %t, pushkey: '%s', v0 layout?: %t, logstash type: '%s'\n",
 			address, database, password != "", key, use_v0, logstash_type)
+        log.Printf("Dedotting docker labels: %t", dedot_labels)
 		log.Printf("Timeouts set, connect: %dms, read: %dms, write: %dms\n", connect_timeout, read_timeout, write_timeout)
 	}
 	if connect_timeout+read_timeout+write_timeout > 950 {
