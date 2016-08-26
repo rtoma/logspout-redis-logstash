@@ -143,6 +143,10 @@ If you are unable to code, feel free to create a issue describing your feature r
 
 ## Changelog
 
+### 0.1.7-dev
+
+- Added parameter for dedotting Docker labels (required for ES 2.x). Thanks to adepretis!
+
 ### 0.1.6
 
 - Added parameters for Redis connection timeouts

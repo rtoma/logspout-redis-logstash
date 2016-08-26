@@ -61,7 +61,7 @@ func TestCreateLogstashMessageV1(t *testing.T) {
 		Time:   time.Unix(int64(1453818496), 595000000),
 	}
 
-	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", false, "my-type")
+	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", false, "my-type", false)
 	jq := makeQuery(msg)
 
 	assert.Equal("my-type", getString(jq, "@type"))
@@ -98,7 +98,7 @@ func TestCreateLogstashMessageV0(t *testing.T) {
 		Time:   time.Unix(int64(1453813310), 1000000),
 	}
 
-	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", true, "some-type")
+	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", true, "some-type", false)
 	jq := makeQuery(msg)
 
 	assert.Equal("some-type", getString(jq, "@type"))
@@ -135,7 +135,7 @@ func TestCreateLogstashMessageOptionalType(t *testing.T) {
 		Time:   time.Unix(int64(1453813330), 0),
 	}
 
-	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", true, "")
+	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", true, "", false)
 	jq := makeQuery(msg)
 	//log.Printf("Standard message: %s", msg)
 
@@ -161,7 +161,7 @@ func TestCreateLogstashMessageWithJsonData(t *testing.T) {
 		Time:   time.Unix(int64(1453818496), 595000000),
 	}
 
-	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", false, "my-type")
+	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", false, "my-type", false)
 	jq := makeQuery(msg)
 
 	assert.Equal("something happened", getString(jq, "message"))
@@ -190,7 +190,7 @@ func TestCreateLogstashMessageWithJsonDataAndNoMessage(t *testing.T) {
 		Time:   time.Unix(int64(1453818496), 595000000),
 	}
 
-	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", false, "my-type")
+	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", false, "my-type", false)
 	jq := makeQuery(msg)
 
 	assert.Equal("no message", getString(jq, "message"))
@@ -215,7 +215,7 @@ func TestCreateLogstashMessageWithJsonDataAndNoLogtype(t *testing.T) {
 		Time:   time.Unix(int64(1453818496), 595000000),
 	}
 
-	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", false, "my-type")
+	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", false, "my-type", false)
 	jq := makeQuery(msg)
 
 	assert.Equal("here i am!", getString(jq, "message"))
@@ -244,7 +244,7 @@ func TestCreateLogstashMessageWithJsonDataAndUnknownLogtype(t *testing.T) {
 		Time:   time.Unix(int64(1453818496), 595000000),
 	}
 
-	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", false, "my-type")
+	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", false, "my-type", false)
 	jq := makeQuery(msg)
 	//log.Printf("Dynamic message: %s", msg)
 
@@ -275,15 +275,14 @@ func TestCreateLogstashMessageWithJsonDataAndAccesLogtype(t *testing.T) {
 		Time:   time.Unix(int64(1453818496), 595000000),
 	}
 
-	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", false, "my-type")
+	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", false, "my-type", false)
 	jq := makeQuery(msg)
+	//log.Printf("Dynamic message: %s", msg)
 
 	assert.Equal("accesslog", getString(jq, "logtype"))
 	assert.Equal("/internal/apidocs.json/v1/policies", getString(jq, "message"))
 	assert.Equal(200, getInt(jq, "accesslog", "response"))
 	assert.Equal(3488, getInt(jq, "accesslog", "bytes"))
-
-	//log.Printf("Dynamic message: %s", msg)
 
 }
 
@@ -305,13 +304,12 @@ func TestCreateLogstashMessageWithJsonDataAndNumericLogtype(t *testing.T) {
 		Time:   time.Unix(int64(1453818496), 595000000),
 	}
 
-	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", false, "my-type")
+	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", false, "my-type", false)
 	jq := makeQuery(msg)
+	//log.Printf("Dynamic message: %s", msg)
 
 	assert.Equal("", getString(jq, "logtype"))
 	assert.Equal(42, getInt(jq, "event", "line"))
-
-	//log.Printf("Dynamic message: %s", msg)
 
 }
 
@@ -333,12 +331,11 @@ func TestCreateLogstashMessageWithInvalidJsonData(t *testing.T) {
 		Time:   time.Unix(int64(1453818496), 595000000),
 	}
 
-	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", false, "my-type")
+	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", false, "my-type", false)
 	jq := makeQuery(msg)
+	//log.Printf("Dynamic message invalid json: %s", msg)
 
 	assert.Equal("", getString(jq, "logtype"))
-
-	//log.Printf("Dynamic message invalid json: %s", msg)
 
 }
 
@@ -363,6 +360,7 @@ func TestCreateLogstashMessageV0WithDeDottingEnabled(t *testing.T) {
 
 	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", true, "some-type", true)
 	jq := makeQuery(msg)
+	//log.Printf("%s", msg)
 
 	assert.Equal("abc", getString(jq, "@fields", "docker", "labels", "label_1_2_3"))
 	assert.Equal("def", getString(jq, "@fields", "docker", "labels", "label_3_2_1"))
@@ -391,8 +389,8 @@ func TestCreateLogstashMessageV1WithDeDottingEnabled(t *testing.T) {
 	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", false, "some-type", true)
 	jq := makeQuery(msg)
 
-	assert.Equal("abc", getString(jq, "@fields", "docker", "labels", "label_1_2_3"))
-	assert.Equal("def", getString(jq, "@fields", "docker", "labels", "label_3_2_1"))
+	assert.Equal("abc", getString(jq, "docker", "labels", "label_1_2_3"))
+	assert.Equal("def", getString(jq, "docker", "labels", "label_3_2_1"))
 
 }
 
@@ -415,7 +413,7 @@ func TestCreateLogstashMessageV0WithDeDottingDefaultDisabled(t *testing.T) {
 		Time:   time.Unix(int64(1453813310), 1000000),
 	}
 
-	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", true, "some-type")
+	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", true, "some-type", false)
 	jq := makeQuery(msg)
 
 	assert.Equal("abc", getString(jq, "@fields", "docker", "labels", "label.1.2.3"))
@@ -442,11 +440,12 @@ func TestCreateLogstashMessageV1WithDeDottingDefaultDisabled(t *testing.T) {
 		Time:   time.Unix(int64(1453813310), 1000000),
 	}
 
-	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", false, "some-type")
+	msg, _ := createLogstashMessage(&m, "tst-mesos-slave-001", false, "some-type", false)
 	jq := makeQuery(msg)
+    //log.Printf("%s", msg)
 
-	assert.Equal("abc", getString(jq, "@fields", "docker", "labels", "label.1.2.3"))
-	assert.Equal("def", getString(jq, "@fields", "docker", "labels", "label.3.2.1"))
+	assert.Equal("abc", getString(jq, "docker", "labels", "label.1.2.3"))
+	assert.Equal("def", getString(jq, "docker", "labels", "label.3.2.1"))
 
 }
 
