@@ -94,8 +94,8 @@ else
   # not in dev mode: get our version tag from github
   git clone --single-branch -b "$app_version" --depth 1 https://\$repo2 src/\$repo2
 fi
-# get deps
-go get -v \$repo2
+# get deps for build + testing
+go get -v -t \$repo2
 
 cat > src/\$repo1/modules.go <<EOM
 package main
@@ -105,6 +105,10 @@ import (
   _ "github.com/rtoma/logspout-redis-logstash"
 )
 EOM
+
+cd src/\$repo2
+go test -v
+
 CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /target/linux.bin -ldflags "-X main.Version=v${app_version}-${logspout_version}" github.com/gliderlabs/logspout
 EOF
 
