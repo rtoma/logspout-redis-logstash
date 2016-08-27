@@ -4,3 +4,6 @@ Dockerfile.example
 .idea
 pkg/
 src/
+target/
+.cache/
+.golangbuilder.sh

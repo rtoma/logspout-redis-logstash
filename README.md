@@ -132,6 +132,10 @@ If you'd used `"logtype":"accesslog"` the JSON doc would have looked like:
 }
 ```
 
+## Building
+
+Use `./build.sh <version>` to build a Docker image for a tagged version.
+If you developing, use `./build.sh -d <version>` to build a Docker image from local sources.
 
 
 ## Contribution
@@ -142,6 +146,10 @@ If you are unable to code, feel free to create a issue describing your feature r
 
 
 ## Changelog
+
+### 0.1.8
+
+- Improved build system
 
 ### 0.1.7
 
