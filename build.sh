@@ -2,26 +2,44 @@
 
 GOLANG_BUILDER_IMAGE=golang:1.7
 DEFAULT_LOGSPOUT_VERSION=v3.1
+BASE_IMAGE=scratch
 IMAGE=rtoma/logspout-redis-logstash
 
+usage() {
+  echo "Usage: $0 [-d] [-n] [-b <base image>] [-g <golang builder image>] <app version> [<logspout version>]"
+  echo
+  echo "Parameters:"
+  echo "   -d         : Enable development mode. Local sourcefile will be used instead of Github."
+  echo "   -n         : Skip building of Docker image, to allow manual building."
+  echo "   -b <image> : Set different Docker base image."
+  echo "   -g <image> : Set different Golang builder image."
+  exit "${1:-0}"
+}
 
-# Default behavior: using source from Github and ignore any local changes
-# But this can be changed by using this switch
-if [ "$1" = "-d" ]; then
-  DEVMODE=1
-  shift
-else
-  DEVMODE=
-fi
+
+DEVMODE=0
+BUILDMODE=1
+while getopts "dnhg:b:" opt; do
+  case $opt in
+    d ) DEVMODE=1;;
+    n ) BUILDMODE=0;;
+    g ) GOLANG_BUILDER_IMAGE="$OPTARG";;
+    b ) BASE_IMAGE="$OPTARG";;
+    h ) usage;;
+    \?) usage 1;;
+    : ) usage 1;;
+  esac
+done
+shift "$((OPTIND - 1))"
 
 app_version=$1
 logspout_version=${2:-$DEFAULT_LOGSPOUT_VERSION}
 if [ -z "$app_version" ]; then
-  echo "Usage: $0 [-d] <app_version> [<logspout_version>]"
-  exit 1
+  echo "Missing <app version>"
+  usage 1
 fi
 
-if [ -n "$DEVMODE" ]; then
+if [ "$DEVMODE" -eq 1 ]; then
   echo "[*] Running in DEV mode - using local sourcefile"
   app_version="${app_version}-dev"
 fi
@@ -39,9 +57,9 @@ artifact=linux.bin
 [ -e "$targetdir/$artifact" ] && rm -f "$targetdir/$artifact"
 
 golangbuilder=$PWD/.golangbuilder.sh
-dockerfile=$targetdir/.dockerfile.tmp
+dockerfile=$targetdir/Dockerfile
 
-trap 'echo "[*] Cleaning up"; rm -f "$golangbuilder" "$dockerfile"; exit' EXIT
+trap 'echo "[*] Cleaning up"; rm -f "$golangbuilder"; [ "$BUILDMODE" -eq 1 ] && rm -rf "$dockerfile"; exit' EXIT
 
 # create script to run inside of golang builder
 cat > "$golangbuilder" <<EOF
@@ -87,7 +105,7 @@ go get -v \$repo1
 # always start clean, wether dev mode or not
 rm -rf src/\$repo2
 # in dev mode: mkdir and copy source from local repo
-if [ -n "$DEVMODE" ]; then
+if [ "$DEVMODE" -eq 1 ]; then
   mkdir -p src/\$repo2
   cp -rp /localrepo/* src/\$repo2
 else
@@ -116,12 +134,13 @@ chmod a+x "$golangbuilder"
 
 # exec builder
 echo "[*] Running Golang builder to compile v$app_version ..."
+echo "[*] Golang image used: $GOLANG_BUILDER_IMAGE"
 docker run --rm \
   -v "$golangbuilder":/builder.sh:ro \
   -v "$PWD/.cache":/go/src \
   -v "$PWD":/localrepo:ro \
   -v "$targetdir":/target \
-  $GOLANG_BUILDER_IMAGE /builder.sh
+  "$GOLANG_BUILDER_IMAGE" /builder.sh
 echo
 
 if [ ! -e "$targetdir/$artifact" ]; then
@@ -130,14 +149,20 @@ if [ ! -e "$targetdir/$artifact" ]; then
 fi
 
 cat > "$dockerfile" <<EOF
-FROM scratch
+FROM $BASE_IMAGE
 COPY $artifact /$artifact
 ENTRYPOINT ["/$artifact"]
 EOF
 
-echo "[*] Building Docker image $IMAGE:$app_version ..."
-docker build -f "$dockerfile" -t "$IMAGE:$app_version" target/
+if [ "$BUILDMODE" -eq 1 ]; then
+  echo "[*] Building Docker image $IMAGE:$app_version ..."
+  docker build -f "$dockerfile" -t "$IMAGE:$app_version" target/
+  echo
+  echo "[*] Built $IMAGE image:"
+  docker images | grep "^$IMAGE"
+else
+  echo "[*] We're in manual build mode: no Docker image will be build"
+  echo "Dockerfile: $dockerfile"
+  echo "Artifact  : $targetdir/$artifact"
+fi
 echo
-
-echo "[*] Built $IMAGE image:"
-docker images | egrep "^$IMAGE"
