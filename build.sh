@@ -78,6 +78,9 @@ cat > "$golangbuilder" <<EOF
 set -ex
 cd \$GOPATH
 
+# fix for internal gobuilder image with bad src
+rm -rf src/golang.org/x/net
+
 if [ ! -d "src/github.com/docker/docker" ]; then
   # minimize download
   git clone --single-branch --depth 1 https://github.com/docker/docker src/github.com/docker/docker
