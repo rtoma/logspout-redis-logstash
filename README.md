@@ -147,7 +147,7 @@ If you are unable to code, feel free to create a issue describing your feature r
 
 ## Changelog
 
-### 0.1.8
+### 0.1.8 + 0.1.9
 
 - Improved build system
 
