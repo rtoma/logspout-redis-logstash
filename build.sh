@@ -140,6 +140,10 @@ docker run --rm \
   -v "$PWD/.cache":/go/src \
   -v "$PWD":/localrepo:ro \
   -v "$targetdir":/target \
+  -e "http_proxy=$http_proxy" \
+  -e "https_proxy=$https_proxy" \
+  -e "HTTP_PROXY=$HTTP_PROXY" \
+  -e "HTTPS_PROXY=$HTTPS_PROXY" \
   "$GOLANG_BUILDER_IMAGE" /builder.sh
 echo
 
@@ -156,7 +160,12 @@ EOF
 
 if [ "$BUILDMODE" -eq 1 ]; then
   echo "[*] Building Docker image $IMAGE:$app_version ..."
-  docker build -f "$dockerfile" -t "$IMAGE:$app_version" target/
+  docker build -f "$dockerfile" \
+    --build-arg "http_proxy=$http_proxy" \
+    --build-arg "https_proxy=$https_proxy" \
+    --build-arg "HTTP_PROXY=$HTTP_PROXY" \
+    --build-arg "HTTPS_PROXY=$HTTPS_PROXY" \
+    -t "$IMAGE:$app_version" target/
   echo
   echo "[*] Built $IMAGE image:"
   docker images | grep "^$IMAGE"
