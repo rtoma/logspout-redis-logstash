@@ -6,9 +6,10 @@ BASE_IMAGE=scratch
 IMAGE=rtoma/logspout-redis-logstash
 
 usage() {
-  echo "Usage: $0 [-d] [-n] [-b <base image>] [-g <golang builder image>] <app version> [<logspout version>]"
+  echo "Usage: $0 [-c] [-d] [-n] [-b <base image>] [-g <golang builder image>] <app version> [<logspout version>]"
   echo
   echo "Parameters:"
+  echo "   -c         : Don't use cache for Golang sources (will slow down building)."
   echo "   -d         : Enable development mode. Local sourcefile will be used instead of Github."
   echo "   -n         : Skip building of Docker image, to allow manual building."
   echo "   -b <image> : Set different Docker base image."
@@ -19,8 +20,10 @@ usage() {
 
 DEVMODE=0
 BUILDMODE=1
-while getopts "dnhg:b:" opt; do
+USECACHE=1
+while getopts "cdnhg:b:" opt; do
   case $opt in
+    c ) USECACHE=0;;
     d ) DEVMODE=1;;
     n ) BUILDMODE=0;;
     g ) GOLANG_BUILDER_IMAGE="$OPTARG";;
@@ -49,8 +52,16 @@ set -e
 # setup clean target dir
 targetdir=$PWD/target
 [ ! -d "$targetdir" ] && mkdir -p "$targetdir"
-cachedir=$PWD/.cache
-[ ! -d "$cachedir" ] && mkdir -p "$cachedir"
+
+if [ "$USECACHE" -eq 1 ]; then
+  echo "[*] Using local cachedir for Golang sources"
+  cachedir=$PWD/.cache
+  [ ! -d "$cachedir" ] && mkdir -p "$cachedir"
+  docker_cacheopts="-v $cachedir:/go/src"
+else
+  echo "[*] Not using local cachedir for Golang sources (this will slow down builds)"
+  docker_cacheopts=
+fi
 
 # remove old artifact
 artifact=linux.bin
@@ -137,13 +148,13 @@ echo "[*] Running Golang builder to compile v$app_version ..."
 echo "[*] Golang image used: $GOLANG_BUILDER_IMAGE"
 docker run --rm \
   -v "$golangbuilder":/builder.sh:ro \
-  -v "$PWD/.cache":/go/src \
   -v "$PWD":/localrepo:ro \
   -v "$targetdir":/target \
-  -e "http_proxy=$http_proxy" \
-  -e "https_proxy=$https_proxy" \
+  -e "http_proxy=${http_proxy:-}" \
+  -e "https_proxy=${https_proxy:-}" \
   -e "HTTP_PROXY=$HTTP_PROXY" \
   -e "HTTPS_PROXY=$HTTPS_PROXY" \
+  $docker_cacheopts \
   "$GOLANG_BUILDER_IMAGE" /builder.sh
 echo
 
