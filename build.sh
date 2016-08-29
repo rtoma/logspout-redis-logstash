@@ -79,7 +79,7 @@ set -ex
 cd \$GOPATH
 
 # fix for internal gobuilder image with bad src
-rm -rf src/golang.org/x/net
+#rm -rf src/golang.org/x/net
 
 if [ ! -d "src/github.com/docker/docker" ]; then
   # minimize download
