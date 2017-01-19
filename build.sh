@@ -1,19 +1,22 @@
 #!/bin/sh
 
 GOLANG_BUILDER_IMAGE=golang:1.7
-DEFAULT_LOGSPOUT_VERSION=v3.1
+LOGSPOUT_BRANCH=master
+LOGSPOUT_REDIS_LOGSTASH_BRANCH=master
 BASE_IMAGE=scratch
-IMAGE=rtoma/logspout-redis-logstash
+IMAGE_VERSION=latest
+IMAGE=artifacts.ath.bskyb.com:5001/olisipo/logspout-redis-logstash
 
 usage() {
-  echo "Usage: $0 [-c] [-d] [-n] [-b <base image>] [-g <golang builder image>] <app version> [<logspout version>]"
+  echo "Usage: $0 [-c] [-d] [-n] [-b <base image>] [-g <golang builder image>] [-v <version>] <logspout redis logstash branch> [<logspout branch>]"
   echo
   echo "Parameters:"
-  echo "   -c         : Don't use cache for Golang sources (will slow down building)."
-  echo "   -d         : Enable development mode. Local sourcefile will be used instead of Github."
-  echo "   -n         : Skip building of Docker image, to allow manual building."
-  echo "   -b <image> : Set different Docker base image."
-  echo "   -g <image> : Set different Golang builder image."
+  echo "   -c           : Don't use cache for Golang sources (will slow down building)."
+  echo "   -d           : Enable development mode. Local sourcefile will be used instead of Github."
+  echo "   -n           : Skip building of Docker image, to allow manual building."
+  echo "   -b <image>   : Set different Docker base image."
+  echo "   -g <image>   : Set different Golang builder image."
+  echo "   -v <version> : Set the image version (default is latest)"
   exit "${1:-0}"
 }
 
@@ -21,13 +24,14 @@ usage() {
 DEVMODE=0
 BUILDMODE=1
 USECACHE=1
-while getopts "cdnhg:b:" opt; do
+while getopts "cdnhg:b:v:" opt; do
   case $opt in
     c ) USECACHE=0;;
     d ) DEVMODE=1;;
     n ) BUILDMODE=0;;
     g ) GOLANG_BUILDER_IMAGE="$OPTARG";;
     b ) BASE_IMAGE="$OPTARG";;
+    v ) IMAGE_VERSION="$OPTARG";;
     h ) usage;;
     \?) usage 1;;
     : ) usage 1;;
@@ -35,16 +39,20 @@ while getopts "cdnhg:b:" opt; do
 done
 shift "$((OPTIND - 1))"
 
-app_version=$1
-logspout_version=${2:-$DEFAULT_LOGSPOUT_VERSION}
-if [ -z "$app_version" ]; then
-  echo "Missing <app version>"
+LOGSPOUT_REDIS_LOGSTASH_BRANCH=$1
+LOGSPOUT_BRANCH=$2
+if [ -z "$LOGSPOUT_REDIS_LOGSTASH_BRANCH" ]; then
+  echo "Missing <logspout redis logstash branch>"
+  usage 1
+fi
+if [ -z "$LOGSPOUT_BRANCH" ]; then
+  echo "Missing <logspout branch>"
   usage 1
 fi
 
 if [ "$DEVMODE" -eq 1 ]; then
   echo "[*] Running in DEV mode - using local sourcefile"
-  app_version="${app_version}-dev"
+  IMAGE_VERSION="${IMAGE_VERSION}-dev"
 fi
 
 set -e
@@ -92,20 +100,18 @@ repo2=github.com/rtoma/logspout-redis-logstash
 # ensure we get the current logspout version
 if [ ! -d "src/\$repo1" ]; then
   # not cached, so get fresh
-  git clone --single-branch -b "$logspout_version" --depth 1 https://\$repo1 src/\$repo1
-  # give detached head a name so we can check later
+  git clone https://\$repo1 src/\$repo1
   cd src/\$repo1
-  git checkout -b "$logspout_version"
+  git checkout "$LOGSPOUT_BRANCH"
   cd -
   # save file for later
   cp src/\$repo1/modules.go src/\$repo1/modules.go.bak
-elif [ "\$(cd src/\$repo1 && git rev-parse --abbrev-ref HEAD | cut -d/ -f2-)" != "$logspout_version" ]; then
+elif [ "\$(cd src/\$repo1 && git rev-parse --abbrev-ref HEAD | cut -d/ -f2-)" != "$LOGSPOUT_BRANCH" ]; then
   # if already in cache but different version, rm and get required version
   rm -rf src/\$repo1
-  git clone --single-branch -b "$logspout_version" --depth 1 https://\$repo1 src/\$repo1
-  # give detached head a name so we can check later
+  git clone https://\$repo1 src/\$repo1
   cd src/\$repo1
-  git checkout -b "$logspout_version"
+  git checkout "$LOGSPOUT_BRANCH"
   cd -
   # save file for later
   cp src/\$repo1/modules.go src/\$repo1/modules.go.bak
@@ -124,7 +130,10 @@ if [ "$DEVMODE" -eq 1 ]; then
   cp -rp /localrepo/* src/\$repo2
 else
   # not in dev mode: get our version tag from github
-  git clone --single-branch -b "$app_version" --depth 1 https://\$repo2 src/\$repo2
+  git clone https://\$repo2 src/\$repo2
+  cd src/\$repo2
+  git checkout "$LOGSPOUT_REDIS_LOGSTASH_BRANCH"
+  cd -
 fi
 # get deps for build + testing
 go get -v -t \$repo2
@@ -141,13 +150,13 @@ EOM
 cd src/\$repo2
 go test -v
 
-CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /target/linux.bin -ldflags "-X main.Version=v${app_version}-${logspout_version}" github.com/gliderlabs/logspout
+CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /target/linux.bin -ldflags "-X main.Version=${IMAGE_VERSION}-${LOGSPOUT_REDIS_LOGSTASH_BRANCH}.${LOGSPOUT_BRANCH}" github.com/gliderlabs/logspout
 EOF
 
 chmod a+x "$golangbuilder"
 
 # exec builder
-echo "[*] Running Golang builder to compile v$app_version ..."
+echo "[*] Running Golang builder to compile $IMAGE_VERSION ..."
 echo "[*] Golang image used: $GOLANG_BUILDER_IMAGE"
 docker run --rm \
   -v "$golangbuilder":/builder.sh:ro \
@@ -173,13 +182,13 @@ ENTRYPOINT ["/$artifact"]
 EOF
 
 if [ "$BUILDMODE" -eq 1 ]; then
-  echo "[*] Building Docker image $IMAGE:$app_version ..."
+  echo "[*] Building Docker image $IMAGE:$IMAGE_VERSION ..."
   docker build -f "$dockerfile" \
     --build-arg "http_proxy=$http_proxy" \
     --build-arg "https_proxy=$https_proxy" \
     --build-arg "HTTP_PROXY=$HTTP_PROXY" \
     --build-arg "HTTPS_PROXY=$HTTPS_PROXY" \
-    -t "$IMAGE:$app_version" target/
+    -t "$IMAGE:$IMAGE_VERSION" target/
   echo
   echo "[*] Built $IMAGE image:"
   docker images | grep "^$IMAGE"
