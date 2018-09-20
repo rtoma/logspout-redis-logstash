@@ -94,7 +94,7 @@ if [ ! -d "src/github.com/docker/docker" ]; then
   git clone --single-branch --depth 1 https://github.com/docker/docker src/github.com/docker/docker
 fi
 
-repo1=github.com/gliderlabs/logspout
+repo1=github.com/strava/logspout
 repo2=github.com/rtoma/logspout-redis-logstash
 
 # ensure we get the current logspout version
