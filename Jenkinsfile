@@ -10,7 +10,7 @@ wrappedNode {
 
   // logspout and logspout-redis-logstash config
   def logspoutRedisLogstashSpec = '65e22f7'
-  def logspoutSpec = '9e248d0c5193189575fe503bf6ee6838782976cd'
+  def logspoutSpec = '258abd15d8a6f3542ad23ff5068a62db1acf56f6'
 
   stage ('Prepare') {
       checkout scm
