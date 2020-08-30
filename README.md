@@ -6,7 +6,7 @@ Since v0.1.4 JSON input is supported, enabling you to add structure to your logs
 
 ## Docker image available
 
-Logspout including this adapter is available on [Docker Hub](https://registry.hub.docker.com/u/rtoma/logspout-redis-logstash/). Pull it with:
+Logspout including this adapter is available on [Docker Hub](https://registry.hub.docker.com/r/rtoma/logspout-redis-logstash/). Pull it with:
 
 ```
 $ docker pull rtoma/logspout-redis-logstash
