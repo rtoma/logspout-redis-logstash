@@ -137,6 +137,7 @@ If you'd used `"logtype":"accesslog"` the JSON doc would have looked like:
 Use `./build.sh <version>` to build a Docker image for a tagged version.
 If you developing, use `./build.sh -d <version>` to build a Docker image from local sources.
 
+To build a newer version from remote branch `master` with a specific logspout and golang version, you can run `./build.sh -g golang:1.8 master v3.2.4`.
 
 ## Contribution
 

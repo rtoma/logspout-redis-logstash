@@ -1,7 +1,7 @@
 #!/bin/sh
 
-GOLANG_BUILDER_IMAGE=golang:1.7
-DEFAULT_LOGSPOUT_VERSION=v3.1
+GOLANG_BUILDER_IMAGE=golang:1.8
+DEFAULT_LOGSPOUT_VERSION=v3.2.4
 BASE_IMAGE=scratch
 IMAGE=rtoma/logspout-redis-logstash
 
